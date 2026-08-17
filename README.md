@@ -47,6 +47,20 @@ Built from scratch for the UHI10 Hookathon (17 Aug – 3 Sep 2026).
 
 ## Build
 
+Dependencies are git submodules, so clone recursively:
+
+```bash
+git clone --recurse-submodules https://github.com/impetus82/airbag-hook.git
+```
+
+If you already cloned without `--recurse-submodules`:
+
+```bash
+git submodule update --init --recursive
+```
+
+Then:
+
 ```bash
 forge build
 forge test -vv
