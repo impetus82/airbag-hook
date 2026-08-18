@@ -10,6 +10,7 @@ import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/types/BeforeSwapDelta.sol";
 import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 import {SwapParams, ModifyLiquidityParams} from "v4-core/types/PoolOperation.sol";
+import {AirbagOrders, NotPoolManager} from "./AirbagOrders.sol";
 
 /// @title AirbagHook — impact protection for limit orders
 /// @notice A resting limit order is a free option written to the market. When a violent swap
@@ -29,7 +30,6 @@ import {SwapParams, ModifyLiquidityParams} from "v4-core/types/PoolOperation.sol
 ///      directly rather than inheriting a periphery BaseHook: fewer moving dependencies, and the
 ///      permission surface is explicit and auditable in one file.
 abstract contract AirbagHookBase is IHooks {
-    error NotPoolManager();
     error HookNotImplemented();
 
     IPoolManager public immutable poolManager;
@@ -128,7 +128,7 @@ abstract contract AirbagHookBase is IHooks {
     }
 }
 
-contract AirbagHook is AirbagHookBase {
+contract AirbagHook is AirbagHookBase, AirbagOrders {
     using StateLibrary for IPoolManager;
 
     /// @dev Transient slot holding the pool tick observed before the current swap.
@@ -142,7 +142,7 @@ contract AirbagHook is AirbagHookBase {
     event PreTickObserved(PoolId indexed id, int24 preTick);
     event SwapObserved(PoolId indexed id, int24 preTick, int24 postTick);
 
-    constructor(IPoolManager _poolManager) AirbagHookBase(_poolManager) {}
+    constructor(IPoolManager _poolManager) AirbagHookBase(_poolManager) AirbagOrders(_poolManager) {}
 
     function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
         return Hooks.Permissions({

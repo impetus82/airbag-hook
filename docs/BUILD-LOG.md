@@ -58,3 +58,44 @@ are genuinely out of pocket. This falls out of the measurement, not from taste.
    the dependency tree is deep enough for this to be a real race on a slow network.
 
 ---
+
+## Day 2 — 18 Aug
+
+**Goal: an order is a position, not a promise.**
+
+### Built
+
+`AirbagOrders`: a limit order is one tick-spacing of liquidity sitting entirely on one side of
+the market, owned as an ERC-721. `createOrder` / `cancelOrder` go through `unlock` →
+`unlockCallback` → `modifyLiquidity`, settling the maker's side directly.
+
+6 new tests (9 total, all green): correct side inferred above and below the market, only the
+funding token is pulled, straddling and unaligned ticks rejected, cancel refunds and burns,
+cancel is owner-only.
+
+### Decisions
+
+**Concentrated liquidity does the filling.** When the market crosses the range, the position
+converts on its own from the deposited token into the requested one. So "executing" an order is
+bookkeeping rather than a second swap: no counterparty inventory, no routing back through the
+pool, and — the part that matters here — nothing that perturbs the very price we are about to
+measure displacement against.
+
+**The side is derived, never trusted.** A caller does not declare `zeroForOne`; it follows from
+where the tick sits relative to the market. A range above the market can only be funded with
+`currency0`, one below only with `currency1`. A range straddling the market would be born
+partially filled, which makes both the side and the later displacement measurement ambiguous —
+so it is rejected at creation rather than handled downstream.
+
+**Ownership is an NFT because the rebate has a recipient.** This is the whole differentiator:
+every comparable design pays the pool at large, Airbag pays the specific maker who was run over.
+That requires per-order identity from day one, not bolted on later.
+
+### Challenges
+
+5. **Colliding error declarations across inheritance branches.** Both the hook base and the order
+   book independently declared `error NotPoolManager()`, which is an "Identifier already declared"
+   at the point they meet. Fixed by hoisting it to file scope and sharing one definition — the
+   same guard genuinely means the same thing in both places.
+
+---
