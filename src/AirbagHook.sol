@@ -179,8 +179,8 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
     }
 
-    /// @notice Day-1 skeleton: observe the tick span the swap swept. The displacement charge,
-    ///         the maker-order bookkeeping and the ERC-721 credit land on top of this.
+    /// @notice Settle every order the swap crossed. The displacement charge and the ERC-721
+    ///         credit land on top of this, using the same (preTick, postTick) pair.
     function afterSwap(address, PoolKey calldata key, SwapParams calldata, BalanceDelta, bytes calldata)
         external
         override
@@ -193,6 +193,9 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
         }
         (, int24 postTick,,) = poolManager.getSlot0(key.toId());
         emit SwapObserved(key.toId(), preTick, postTick);
+
+        _markFills(key.toId(), key.tickSpacing, preTick, postTick);
+
         return (IHooks.afterSwap.selector, int128(0));
     }
 }

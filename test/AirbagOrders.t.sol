@@ -57,7 +57,7 @@ contract AirbagOrdersTest is Test, Deployers {
         uint256 id = hook.createOrder(key, target, 1e18);
 
         assertEq(hook.ownerOf(id), maker, "maker owns the order NFT");
-        (,,, bool zeroForOne, uint128 liq,, bool filled) = hook.orders(id);
+        (,,, bool zeroForOne, uint128 liq,, bool filled,) = hook.orders(id);
         assertTrue(zeroForOne, "range above the market must be funded with currency0");
         assertEq(liq, 1e18);
         assertFalse(filled);
@@ -76,7 +76,7 @@ contract AirbagOrdersTest is Test, Deployers {
         vm.prank(maker);
         uint256 id = hook.createOrder(key, target, 1e18);
 
-        (,,, bool zeroForOne,,,) = hook.orders(id);
+        (,,, bool zeroForOne,,,,) = hook.orders(id);
         assertFalse(zeroForOne, "range below the market must be funded with currency1");
         assertEq(IERC20(Currency.unwrap(currency0)).balanceOf(maker), bal0Before, "currency0 untouched");
     }

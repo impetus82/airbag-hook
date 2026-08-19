@@ -59,7 +59,7 @@ are genuinely out of pocket. This falls out of the measurement, not from taste.
 
 ---
 
-## Day 2 — 18 Aug
+## Day 2 — 17 Aug (same session as day 1)
 
 **Goal: an order is a position, not a promise.**
 
@@ -97,5 +97,44 @@ That requires per-order identity from day one, not bolted on later.
    book independently declared `error NotPoolManager()`, which is an "Identifier already declared"
    at the point they meet. Fixed by hoisting it to file scope and sharing one definition — the
    same guard genuinely means the same thing in both places.
+
+---
+
+## Day 3 — 19 Aug
+
+**Goal: notice which orders the market filled — cheaply, and without lying.**
+
+### Built
+
+Fill detection. Each pool keeps its own tick bitmap of ticks that host waiting orders, so
+`afterSwap` walks only ticks that actually contain something, using v4-core's `TickBitmap`.
+Orders fully crossed by the swap are marked filled and removed from their tick's waiting list;
+the bitmap bit clears when the last order at a tick leaves.
+
+6 new tests (15 total, all green): fills on a rising cross, fills on a falling cross, an
+untouched order stays waiting, five orders fill in a single swap, a cancelled order leaves
+nothing behind to fill — and the negative case below.
+
+### Decisions
+
+**Only fully crossed orders count.** If the price stops *inside* a maker's range the position is
+only partly converted: they have not received their limit price, and there is no displacement
+past their tick to compensate. Marking that filled would be a lie the rest of the design would
+then be built on, so there is an explicit test for it.
+
+**The scan budget is spent only inside the region the swap crossed.** The walk is anchored at
+the market and returns the moment it leaves the fillable region; because the bitmap is ordered,
+orders resting far away are never visited and so cannot be used to exhaust the budget. This is a
+direct lesson from auditing my own previous hook, where a scan anchored at a sentinel could be
+starved with ~100 dust orders. Cheap to mount, and I do not intend to ship it twice.
+
+### Challenges
+
+6. **`vm.prank` eaten by a helper.** A test helper that resolved an aligned tick called
+   `manager.getSlot0()` internally — an external call, which consumed the prank, so `createOrder`
+   arrived from the test contract rather than the maker. The maker had approved the hook; the
+   test contract had not, and solmate's `transferFrom` decrements the allowance unchecked, so the
+   failure surfaced as `panic: arithmetic underflow` from deep inside the unlock callback rather
+   than as anything resembling "wrong caller". Resolve values before pranking.
 
 ---
