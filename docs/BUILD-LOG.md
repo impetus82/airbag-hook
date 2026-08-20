@@ -138,3 +138,43 @@ starved with ~100 dust orders. Cheap to mount, and I do not intend to ship it tw
    than as anything resembling "wrong caller". Resolve values before pranking.
 
 ---
+
+## Day 4 — 20 Aug
+
+**Goal: the charge rule — how far past a maker the market went, and what that is worth.**
+
+### Built
+
+`AirbagMath`, deliberately a standalone library so the arithmetic can be reasoned about and
+cross-checked without instantiating a pool. 13 tests, property-first (28 total, all green).
+
+### Decisions
+
+**Displacement is measured from the edge where the fill completed, not from the maker's near
+tick.** Traversing the maker's own range *is* the fill, at the price they asked for. Charging for
+it would be charging someone for the trade they wanted. Of the two available readings this is the
+conservative one, which is the right bias for a number used to take money.
+
+**The threshold is the pool's fee, and the charge applies to the excess above it.** A maker filled
+by an ordinary swap has already collected the fee on their own fill, so below that line they are
+not out of pocket and the hook must be silent. Only the part of the overshoot the fee did not
+cover is compensable. This is why benign flow pays nothing without needing a special case for it.
+
+**Rounding happens exactly once, in token units.** See below — this began as a failing test.
+
+### Challenges
+
+7. **Literal arithmetic in Solidity is exact rational.** `(4 * 7000) / 10_000` written as
+   literals is `2.8`, not `2`, so it will not typecheck as a `uint256` — an expected value has to
+   be the number the runtime actually produces. Mildly disorienting, and a good argument for
+   writing expected values out longhand in tests rather than re-deriving them from the formula.
+
+8. **A rounding bug the tests found before I did.** Computing the charge as whole basis points
+   truncates 70% of a 1 bp overshoot to zero, and shaves 6.5 bps down to 6 on the measured tail
+   mean — a double-digit share of the maker's compensation, silently. Fixed by keeping the
+   rounded figure as a *view* for events and adding `chargeAmount`, which carries the unrounded
+   value through and truncates once, in token units. It still truncates rather than rounds up:
+   erring downward favours the party being charged, which is the right direction when the
+   contract is taking someone's money.
+
+---
