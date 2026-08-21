@@ -178,3 +178,51 @@ cover is compensable. This is why benign flow pays nothing without needing a spe
    contract is taking someone's money.
 
 ---
+
+## Day 5 — 21 Aug
+
+**Goal: the charge stops being arithmetic and starts being money.**
+
+### Built
+
+`afterSwap` now prices every fill it detects and collects the total from the swap via
+`afterSwapReturnDelta`, crediting each maker's order. 6 new tests (34 total, all green),
+including the two that matter most: a gentle fill costs the swapper nothing, and running
+yourself over is a losing trade.
+
+### Decisions
+
+**Take first, then return the delta.** The `take` leaves the hook owing the pool; the returned
+delta cancels that, and the swapper ends up short by exactly the charge. Returning a delta
+without taking would leave an unsettled balance and revert the entire swap — the charge has to be
+built so that a mistake here fails loudly rather than quietly eating someone's trade.
+
+**The rebate is booked per currency, not as one number.** The charge lands on the swap's
+*unspecified* currency — the output of an exact-input swap, the input of an exact-output one —
+which is not always the currency the order converted into. A single `accruedRebate` field would
+have been silently wrong for half of all fills.
+
+**Notional is denominated in the currency the charge is collected in.** The charge is a share of
+a *price* move, so applying basis points to a notional measured in the other token would be an
+arithmetic error across a units boundary. A fully converted single-tick position has an exact
+value in both denominations, so the matching one is computed rather than approximated.
+
+**Filling and pricing happen in one pass.** The context needed to price a fill is threaded down
+the same walk that detects it. Two passes could disagree about which orders were filled, and a
+maker filled without being compensated is precisely the outcome this hook exists to prevent.
+
+### Challenges
+
+9. **Tests calibrated by guessing a swap size.** The first version of the gentle-fill test picked
+   an amount and hoped the price would stop somewhere reasonable; it overshot, charged, and
+   failed. Displacement is the quantity under test, so it has to be *set*: both tests now drive
+   the price to an exact tick with a `sqrtPriceLimitX96` and assert against a known distance.
+   Much better tests than the ones I set out to write.
+
+10. **`vm.prank` eaten by an approval — the same trap as day 3, in a new costume.** The self-fill
+    test pranked the maker, then called a helper whose first statement was an `approve`, which
+    consumed the prank; the swap arrived from the test contract and the measured cost was zero,
+    so the assertion compared a real rebate against nothing. Rewritten to measure the fee paid on
+    the swap directly, which is both correct and a stronger statement of the property.
+
+---

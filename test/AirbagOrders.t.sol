@@ -13,6 +13,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {AirbagHook} from "../src/AirbagHook.sol";
 import {AirbagOrders} from "../src/AirbagOrders.sol";
+import {AirbagOrders} from "../src/AirbagOrders.sol";
 
 /// @notice Day 2 — an order is one tick-spacing of liquidity, entirely on one side of the
 ///         market, owned as an ERC-721. These tests pin the properties the whole design leans
@@ -57,7 +58,10 @@ contract AirbagOrdersTest is Test, Deployers {
         uint256 id = hook.createOrder(key, target, 1e18);
 
         assertEq(hook.ownerOf(id), maker, "maker owns the order NFT");
-        (,,, bool zeroForOne, uint128 liq,, bool filled,) = hook.orders(id);
+        AirbagOrders.Order memory o = hook.orderOf(id);
+        bool zeroForOne = o.zeroForOne;
+        uint128 liq = o.liquidity;
+        bool filled = o.filled;
         assertTrue(zeroForOne, "range above the market must be funded with currency0");
         assertEq(liq, 1e18);
         assertFalse(filled);
@@ -76,7 +80,7 @@ contract AirbagOrdersTest is Test, Deployers {
         vm.prank(maker);
         uint256 id = hook.createOrder(key, target, 1e18);
 
-        (,,, bool zeroForOne,,,,) = hook.orders(id);
+        bool zeroForOne = hook.orderOf(id).zeroForOne;
         assertFalse(zeroForOne, "range below the market must be funded with currency1");
         assertEq(IERC20(Currency.unwrap(currency0)).balanceOf(maker), bal0Before, "currency0 untouched");
     }

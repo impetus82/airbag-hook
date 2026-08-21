@@ -10,7 +10,9 @@ import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/types/BeforeSwapDelta.sol";
 import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 import {SwapParams, ModifyLiquidityParams} from "v4-core/types/PoolOperation.sol";
+import {Currency} from "v4-core/types/Currency.sol";
 import {AirbagOrders, NotPoolManager} from "./AirbagOrders.sol";
+import {AirbagMath} from "./AirbagMath.sol";
 
 /// @title AirbagHook — impact protection for limit orders
 /// @notice A resting limit order is a free option written to the market. When a violent swap
@@ -139,8 +141,15 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
     uint256 private constant PRE_TICK_SLOT =
         0xf39f4f275c965d88ccd39db7efb952551c40121db7dd5c014405e56626e0561b;
 
+    /// @dev Hard ceiling on what a single fill can be charged, in bps of that order's notional.
+    ///      Not a tuning knob: without it a pathological tick span would let the charge approach
+    ///      the whole position. The measured p99 displacement is ~50 bps, so this sits far above
+    ///      anything observed while still bounding the worst case.
+    uint256 internal constant CAP_BPS = 200;
+
     event PreTickObserved(PoolId indexed id, int24 preTick);
     event SwapObserved(PoolId indexed id, int24 preTick, int24 postTick);
+    event AirbagDeployed(PoolId indexed id, bool inCurrency0, uint256 charge);
 
     constructor(IPoolManager _poolManager) AirbagHookBase(_poolManager) AirbagOrders(_poolManager) {}
 
@@ -181,7 +190,7 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
 
     /// @notice Settle every order the swap crossed. The displacement charge and the ERC-721
     ///         credit land on top of this, using the same (preTick, postTick) pair.
-    function afterSwap(address, PoolKey calldata key, SwapParams calldata, BalanceDelta, bytes calldata)
+    function afterSwap(address, PoolKey calldata key, SwapParams calldata params, BalanceDelta, bytes calldata)
         external
         override
         onlyPoolManager
@@ -194,8 +203,32 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
         (, int24 postTick,,) = poolManager.getSlot0(key.toId());
         emit SwapObserved(key.toId(), preTick, postTick);
 
-        _markFills(key.toId(), key.tickSpacing, preTick, postTick);
+        // The returned delta lands on the swap's *unspecified* currency: the output for an
+        // exact-input swap, the input for an exact-output one.
+        bool exactInput = params.amountSpecified < 0;
+        bool chargeInCurrency0 = (exactInput != params.zeroForOne);
 
-        return (IHooks.afterSwap.selector, int128(0));
+        uint256 charge = _markFills(
+            key.toId(),
+            ChargeCtx({
+                spacing: key.tickSpacing,
+                thresholdBps: AirbagMath.feeToBps(key.fee),
+                capBps: CAP_BPS,
+                chargeInCurrency0: chargeInCurrency0
+            }),
+            preTick,
+            postTick
+        );
+
+        if (charge == 0) return (IHooks.afterSwap.selector, int128(0));
+
+        // Take first, then return the matching delta: the take leaves the hook owing the pool,
+        // the returned delta cancels it, and the swapper is the one who ends up short. Returning
+        // without taking would leave an unsettled balance and revert the whole swap.
+        Currency paid = chargeInCurrency0 ? key.currency0 : key.currency1;
+        poolManager.take(paid, address(this), charge);
+
+        emit AirbagDeployed(key.toId(), chargeInCurrency0, charge);
+        return (IHooks.afterSwap.selector, int128(int256(charge)));
     }
 }

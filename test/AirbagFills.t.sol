@@ -15,6 +15,7 @@ import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {AirbagHook} from "../src/AirbagHook.sol";
+import {AirbagOrders} from "../src/AirbagOrders.sol";
 
 /// @notice Day 3 — the market fills orders; the hook only has to notice. These tests pin what
 ///         "noticed correctly" means, including the case that must NOT count: a swap that stops
@@ -47,7 +48,7 @@ contract AirbagFillsTest is Test, Deployers {
     }
 
     function _isFilled(uint256 id) internal view returns (bool f) {
-        (,,,,,, f,) = hook.orders(id);
+        f = hook.orderOf(id).filled;
     }
 
     function _alignedTick(int24 offsetSpacings) internal view returns (int24) {
@@ -138,7 +139,7 @@ contract AirbagFillsTest is Test, Deployers {
 
         swap(key, false, -5e17, "");
 
-        (,,,,,, bool filled,) = hook.orders(id);
+        bool filled = hook.orderOf(id).filled;
         assertFalse(filled, "a cancelled order has no state left to fill");
     }
 
