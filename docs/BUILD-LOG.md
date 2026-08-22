@@ -226,3 +226,53 @@ maker filled without being compensated is precisely the outcome this hook exists
     the swap directly, which is both correct and a stronger statement of the property.
 
 ---
+
+## Day 6 — 22 Aug
+
+**Goal: the maker gets paid, and the pool is protected from orders big enough to corrupt the
+measurement.**
+
+### Built
+
+`claimOrder` — withdraws the converted position plus whatever Airbag credited, and burns the NFT.
+A size guard at creation: an order may be at most 1% of the pool's active liquidity. 5 new tests
+(39 total, all green).
+
+### Decisions
+
+**The rebate is paid from tokens the hook already holds.** They were taken from the filling swap
+at the moment of the fill, not promised for later. Nothing about a claim depends on a future
+price, a keeper, or anyone's solvency — which is the same reason deferred settlement was cut from
+the design in the first place.
+
+**Orders are capped at 1% of pool liquidity, for two structural reasons rather than one
+stylistic one.** A position large relative to the pool moves the price on its own way out, which
+would contaminate the very displacement it is compensated by; and an outsized order makes it
+cheap for its own maker to walk the market across it deliberately. Active liquidity is a proxy
+for depth — the order rests out of range, so they are not the same quantity — but it is the
+honest measure available in-transaction without an oracle, which is a constraint this design
+accepts everywhere else too.
+
+**Validation order is part of the interface.** The size check initially ran before the
+side-of-market check, so an order straddling the price reported "too large" instead of the
+reason that actually mattered. Which side of the market an order is on is the more fundamental
+question; it now answers first.
+
+### Challenges
+
+11. **The guard broke every earlier test, correctly.** Existing tests used order sizes that were
+    a large fraction of the minimal fixture pool. Rather than shrink the orders, the pools are now
+    deepened in setup — a realistic cap deserves a realistic pool.
+
+12. **Deepening the pools then broke the swaps, for the third time in three days.** Every test
+    that moved the price by *amount* stopped reaching its target once the pool got deep. This is
+    the same failure as day 5, and the same fix: all of them now drive to an exact tick via
+    `sqrtPriceLimitX96`. A test that guesses a swap size silently stops testing anything the
+    moment pool depth changes; it took three separate encounters before I made it a rule.
+
+13. **A helper that funded itself corrupted the assertions around it.** `_pushTo` called `deal`
+    to make sure it could afford the swap, which reset balances that the surrounding test was
+    measuring across — one assertion compared against a freshly dealt number, another underflowed.
+    Funding belongs in setup, never inside a helper a measurement wraps.
+
+---

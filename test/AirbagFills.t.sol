@@ -9,8 +9,10 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {HookMiner} from "v4-periphery/test/shared/HookMiner.sol";
-import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {SwapParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
+import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
+import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import {SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
@@ -39,6 +41,12 @@ contract AirbagFillsTest is Test, Deployers {
 
         (key,) = initPoolAndAddLiquidity(currency0, currency1, IHooks(address(hook)), 3000, SQRT_PRICE_1_1);
 
+        _deepenPool();
+        // Funded once here, never inside a helper: dealing mid-test would reset balances that
+        // assertions are measuring across.
+        deal(Currency.unwrap(currency0), address(this), 50_000 ether);
+        deal(Currency.unwrap(currency1), address(this), 50_000 ether);
+
         deal(Currency.unwrap(currency0), maker, 1000 ether);
         deal(Currency.unwrap(currency1), maker, 1000 ether);
         vm.startPrank(maker);
@@ -62,8 +70,8 @@ contract AirbagFillsTest is Test, Deployers {
         uint256 id = hook.createOrder(key, target, 1e18);
         assertFalse(_isFilled(id));
 
-        // Push the price up well past the order's upper bound.
-        swap(key, false, -5e17, "");
+        // Push the price well past the order's upper bound.
+        _pushTo(target + 10 * key.tickSpacing);
 
         (, int24 after_,,) = manager.getSlot0(key.toId());
         assertGe(after_, target + key.tickSpacing, "price must clear the range");
@@ -76,7 +84,7 @@ contract AirbagFillsTest is Test, Deployers {
         uint256 id = hook.createOrder(key, target, 1e18);
         assertFalse(_isFilled(id));
 
-        swap(key, true, -5e17, "");
+        _pushTo(target - 5 * key.tickSpacing);
 
         (, int24 after_,,) = manager.getSlot0(key.toId());
         assertLt(after_, target, "price must fall below the range");
@@ -88,7 +96,7 @@ contract AirbagFillsTest is Test, Deployers {
         vm.prank(maker);
         uint256 id = hook.createOrder(key, far, 1e18);
 
-        swap(key, false, -1e15, ""); // nudge upward, nowhere near `far`
+        _pushTo(key.tickSpacing); // nudge upward, nowhere near `far`
 
         assertFalse(_isFilled(id), "an order the price never reached must stay waiting");
     }
@@ -101,9 +109,8 @@ contract AirbagFillsTest is Test, Deployers {
         vm.prank(maker);
         uint256 id = hook.createOrder(key, target, 1e18);
 
-        // Stop the swap inside [target, target + spacing).
-        uint160 limit = TickMath.getSqrtPriceAtTick(target + key.tickSpacing / 2);
-        swapRouterStopAt(limit);
+        // Stop the market inside [target, target + spacing).
+        _pushTo(target + key.tickSpacing / 2);
 
         (, int24 after_,,) = manager.getSlot0(key.toId());
         assertGe(after_, target, "price should be inside the range");
@@ -121,7 +128,7 @@ contract AirbagFillsTest is Test, Deployers {
             ids[i] = hook.createOrder(key, t, 1e17);
         }
 
-        swap(key, false, -5e17, "");
+        _pushTo(_alignedTick(9));
 
         for (uint256 i; i < 5; ++i) {
             assertTrue(_isFilled(ids[i]), "every crossed order must be filled");
@@ -137,7 +144,7 @@ contract AirbagFillsTest is Test, Deployers {
         vm.prank(maker);
         hook.cancelOrder(id, key);
 
-        swap(key, false, -5e17, "");
+        _pushTo(target + 10 * key.tickSpacing);
 
         bool filled = hook.orderOf(id).filled;
         assertFalse(filled, "a cancelled order has no state left to fill");
@@ -145,15 +152,37 @@ contract AirbagFillsTest is Test, Deployers {
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    function swapRouterStopAt(uint160 sqrtPriceLimitX96) internal {
+    /// @dev Drive the market to an exact tick instead of guessing a swap size. Tick distance is
+    ///      what every property here is about, and a test that hopes for it silently stops
+    ///      testing anything the moment pool depth changes.
+    function _pushTo(int24 targetTick) internal {
+        (, int24 cur,,) = manager.getSlot0(key.toId());
+        if (targetTick == cur) return;
+        bool up = targetTick > cur;
         swapRouter.swap(
             key,
             SwapParams({
-                zeroForOne: false,
-                amountSpecified: -5e17,
-                sqrtPriceLimitX96: sqrtPriceLimitX96
+                zeroForOne: !up,
+                amountSpecified: -5_000 ether,
+                sqrtPriceLimitX96: TickMath.getSqrtPriceAtTick(targetTick)
             }),
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            ""
+        );
+    }
+
+
+    /// @dev Orders are capped at 1% of the pool's active liquidity, so a realistic test needs a
+    ///      realistically deep pool rather than the minimum one the fixtures create.
+    function _deepenPool() internal {
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({
+                tickLower: -6000,
+                tickUpper: 6000,
+                liquidityDelta: 1_000e18,
+                salt: bytes32(0)
+            }),
             ""
         );
     }

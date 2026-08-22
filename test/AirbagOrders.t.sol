@@ -7,6 +7,7 @@ import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
+import {ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {HookMiner} from "v4-periphery/test/shared/HookMiner.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -39,6 +40,8 @@ contract AirbagOrdersTest is Test, Deployers {
         (key,) = initPoolAndAddLiquidity(currency0, currency1, IHooks(address(hook)), 3000, SQRT_PRICE_1_1);
 
         // Fund the maker and let the hook pull on their behalf.
+        _deepenPool();
+
         deal(Currency.unwrap(currency0), maker, 100 ether);
         deal(Currency.unwrap(currency1), maker, 100 ether);
         vm.startPrank(maker);
@@ -133,5 +136,20 @@ contract AirbagOrdersTest is Test, Deployers {
 
         vm.expectRevert(AirbagOrders.NotOrderOwner.selector);
         hook.cancelOrder(id, key);
+    }
+
+    /// @dev Orders are capped at 1% of the pool's active liquidity, so a realistic test needs a
+    ///      realistically deep pool rather than the minimum one the fixtures create.
+    function _deepenPool() internal {
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            ModifyLiquidityParams({
+                tickLower: -6000,
+                tickUpper: 6000,
+                liquidityDelta: 1_000e18,
+                salt: bytes32(0)
+            }),
+            ""
+        );
     }
 }

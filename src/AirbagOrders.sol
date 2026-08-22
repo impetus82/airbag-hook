@@ -43,6 +43,9 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     error NotOrderOwner();
     error OrderAlreadyFilled();
     error PoolKeyMismatch();
+    error OrderNotFilled();
+    error OrderTooLargeForPool();
+    error PoolHasNoLiquidity();
 
     struct Order {
         PoolId poolId;
@@ -60,6 +63,16 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         Add,
         Remove
     }
+
+    /// @dev An order may be at most this share of the pool's active liquidity, in hundredths of
+    ///      a percent. Two distinct reasons, both structural rather than stylistic:
+    ///      a position large relative to the pool moves the price on its own way out, which would
+    ///      contaminate the very displacement we charge for; and an outsized order makes it
+    ///      cheap for its own maker to walk the price across it deliberately.
+    ///      Active liquidity is a proxy for depth — the order rests out of range, so the two are
+    ///      not the same quantity — but it is the honest on-chain measure available in-transaction
+    ///      without an oracle, which is a constraint this design accepts everywhere else too.
+    uint256 internal constant MAX_ORDER_SHARE_BPS = 100; // 1%
 
     struct Callback {
         Action action;
@@ -88,6 +101,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         uint256 indexed orderId, address indexed maker, PoolId indexed poolId, int24 tickLower, bool zeroForOne, uint128 liquidity
     );
     event OrderCancelled(uint256 indexed orderId, address indexed maker);
+    event OrderClaimed(uint256 indexed orderId, address indexed maker, uint256 rebate0, uint256 rebate1);
     event OrderFilled(uint256 indexed orderId, PoolId indexed poolId, int24 tickLower, int24 postTick);
     event RebateCredited(uint256 indexed orderId, bool inCurrency0, uint256 amount, uint256 displacementBps);
     event FillScanTruncated(PoolId indexed poolId, int24 reachedTick);
@@ -118,6 +132,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         (, int24 currentTick,,) = _manager.getSlot0(key.toId());
         int24 tickUpper = tickLower + key.tickSpacing;
 
+
         bool zeroForOne;
         if (currentTick < tickLower) {
             zeroForOne = true; // range is above the market: funded with currency0
@@ -125,6 +140,11 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             zeroForOne = false; // range is below the market: funded with currency1
         } else {
             revert WrongSideOfPrice(); // straddles the market — would be born half-filled
+        }
+        uint128 poolLiquidity = _manager.getLiquidity(key.toId());
+        if (poolLiquidity == 0) revert PoolHasNoLiquidity();
+        if (uint256(liquidity) * 10_000 > uint256(poolLiquidity) * MAX_ORDER_SHARE_BPS) {
+            revert OrderTooLargeForPool();
         }
 
         orderId = nextOrderId++;
@@ -185,6 +205,41 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         );
 
         emit OrderCancelled(orderId, msg.sender);
+    }
+
+    /// @notice Withdraw a filled order: the converted proceeds plus whatever Airbag credited.
+    /// @dev The position is already fully converted by the market, so this is a withdrawal, not
+    ///      an execution. The rebate is paid from tokens the hook already holds — they were taken
+    ///      from the filling swap at the moment of the fill, not promised for later.
+    function claimOrder(uint256 orderId, PoolKey calldata key) external {
+        if (ownerOf(orderId) != msg.sender) revert NotOrderOwner();
+        Order memory o = orders[orderId];
+        if (!o.filled) revert OrderNotFilled();
+        if (PoolId.unwrap(key.toId()) != PoolId.unwrap(o.poolId)) revert PoolKeyMismatch();
+
+        delete orders[orderId];
+        _burn(orderId);
+
+        _manager.unlock(
+            abi.encode(
+                Callback({
+                    action: Action.Remove,
+                    key: key,
+                    maker: msg.sender,
+                    tickLower: o.tickLower,
+                    liquidity: o.liquidity
+                })
+            )
+        );
+
+        if (o.rebate0 != 0) {
+            IERC20(Currency.unwrap(key.currency0)).safeTransfer(msg.sender, o.rebate0);
+        }
+        if (o.rebate1 != 0) {
+            IERC20(Currency.unwrap(key.currency1)).safeTransfer(msg.sender, o.rebate1);
+        }
+
+        emit OrderClaimed(orderId, msg.sender, o.rebate0, o.rebate1);
     }
 
     function unlockCallback(bytes calldata raw) external returns (bytes memory) {
