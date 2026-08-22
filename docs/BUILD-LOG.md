@@ -300,3 +300,56 @@ charge is taken in the same transaction as the fill, "fully backed" is a propert
 can actually hold, rather than a promise about someone's future solvency.
 
 ---
+
+## Day 8 — 22 Aug (same session)
+
+**Goal: make the headline number come from the contract, not from a model of it.**
+
+### Built
+
+`tools/fetch_fixture.py` — pulls a pool's Swap history straight from chain and writes the replay
+fixture, plus the reference distribution the Solidity side is checked against. It lives in the
+repo rather than in a scratch directory so the fixture is reproducible by anyone reading this.
+
+`test/Backtest.t.sol` — replays that history through AirbagHook itself. First real result, from
+48h of Base WETH/USDC: **1,055 swaps replayed, 520 orders filled, 180 of them compensated.**
+Two thirds of fills cost the swapper nothing, which is the design working rather than the design
+failing.
+
+### Decisions
+
+**The path is replayed as tick deltas, not absolute price.** The real pool sits near tick
+-200000 and a fresh clone starts at zero; reproducing the absolute level would mean seeding
+liquidity across an enormous range to no purpose, because displacement is measured in ticks and a
+tick is a ratio. The shape of the path — the entire input — is preserved exactly.
+
+**The maker placement rule is stated, then varied.** Where the makers sit is the free parameter
+of any backtest like this, and it is the first thing a judge should poke at. So it is a named
+constant with a comment rather than a buried magic number, and there is a second test that runs
+the same history with a tight band and a wide one.
+
+**The 48h fixture is for exercising the contract, not for the headline statistic.** That window
+turned out far more volatile than typical: median displacement 6 bps against 2 bps over 30 days,
+and a tail of 52% against ~20%. Quoting it as the product's economics would flatter the result by
+roughly threefold. The 30-day measurement stays the number in the pitch, and this distinction
+goes in the write-up rather than being quietly ignored.
+
+### Challenges
+
+14. **Scratch directories are not storage.** The 30-day fixture and the measurement script from
+    before the window did not survive a session change. Annoying for an hour, right in the end:
+    the tool now lives in the repo, which is where anything the submission's credibility rests on
+    belongs.
+
+15. **The replay silently did nothing.** Fixture ticks are absolute, around -200000; the clone
+    starts at zero, and the guard keeping the price inside the seeded range skipped every single
+    push. The test passed its "did we read the file" assertion and reported zero fills, which is
+    exactly the kind of failure that looks like a boring empty result rather than a bug. Fixed by
+    replaying deltas.
+
+16. **Solidity truncates toward zero, which is not the same as flooring.** Aligning a negative
+    tick with `(t / spacing) * spacing` rounds *up*, putting the grid base above the market, so
+    half of every batch of orders was rejected as being on the wrong side of the price. Only
+    visible once the path wandered below zero.
+
+---
