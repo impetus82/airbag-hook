@@ -276,3 +276,27 @@ question; it now answers first.
     Funding belongs in setup, never inside a helper a measurement wraps.
 
 ---
+
+## Day 7 — 22 Aug (same session as day 6)
+
+**Goal: check the properties against states I would not have thought to construct.**
+
+### Built
+
+An invariant handler that places, cancels, claims and moves the market in arbitrary sequences,
+plus three invariants. ~6,000 handler calls per run, no reverts, no violations. 42 tests total.
+
+### Decisions
+
+**The invariant that matters is that rebates are fully backed.** Every credit sitting on a live
+order is a claim on tokens the hook is holding *right now* — nothing is owed out of a future
+swap. If that could be broken, some maker's claim would fail at the exact moment they tried to
+exercise it, which is the worst possible time to discover a shortfall. The other two invariants
+guard against dangling records: an order that exists has an owner and liquidity, and an unfilled
+order can never carry a credit.
+
+This is also the payoff from cutting deferred settlement back in the design phase. Because the
+charge is taken in the same transaction as the fill, "fully backed" is a property the contract
+can actually hold, rather than a promise about someone's future solvency.
+
+---
