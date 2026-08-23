@@ -400,3 +400,41 @@ filling more than eight orders in a single block is already past what the fee ma
     An external call in an argument is still an external call.
 
 ---
+
+## Day 10 — 23 Aug
+
+**Goal: know exactly where this lands before spending a wei.**
+
+### Built
+
+`script/AirbagConfig.sol`, `script/PredictAirbag.s.sol`, `script/DeployAirbag.s.sol`, and a fork
+rehearsal that runs the whole deployment against the live chains. Both rehearsals pass: the mined
+address reproduces against a real PoolManager and the pool initialises at the intended price.
+
+Predicted, before any transaction:
+
+| | Base | Unichain |
+|---|---|---|
+| hook | `0xc0D3834B3d0076139802096D0f56250bb234C0c4` | `0x6Fb9b0364ECAD42222E4F1EdE396F82CeBdb40C4` |
+| currency0 | WETH | USDC |
+
+### Decisions
+
+**Deploy through the canonical CREATE2 factory, not from the sending account.** A hook address
+has to be mined until it encodes the right permission bits, so unlike an ordinary deployment it
+is not obvious in advance. Going through the factory makes the address depend only on the salt
+and the init code — not on the deployer's nonce — so it can be predicted, written down, and then
+*asserted* at deploy time rather than hoped for. The last time I deployed a hook, the address was
+unknowable until the broadcast because the constructor path built a fresh dependency by nonce;
+that is a mistake worth not repeating.
+
+**Every chain difference lives in one config file.** Including one that would otherwise be a
+latent bug: WETH sorts first on Base, USDC sorts first on Unichain, so `currency0` is a different
+asset on each. Confining that to config means it cannot leak into the swap path as a
+chain-specific branch.
+
+**Rehearse on a fork of the real chain first.** The mined address, the permission-bit validation
+and the pool initialisation now get exercised against the actual PoolManager before real gas is
+involved. Opt-in via `RUN_FORK_TESTS=1` so the default suite stays offline.
+
+---
