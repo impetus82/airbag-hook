@@ -353,3 +353,50 @@ goes in the write-up rather than being quietly ignored.
     visible once the path wandered below zero.
 
 ---
+
+## Day 9 — 22 Aug (same session)
+
+**Goal: close the hole that made the whole mechanism optional.**
+
+### The attack
+
+The charge is triggered by displacement measured at the moment a fill completes. That invites an
+obvious dodge: clear the maker with a tiny swap so the fill is recorded at zero displacement,
+then keep pushing the price with a second swap. Same actor, same block, same final price — and
+the maker was paid nothing.
+
+Splitting costs almost nothing. The pool fee is proportional, so two swaps of half the size pay
+the same fee as one, plus a little gas. Written as a failing test first: one swap compensated the
+maker, two swaps to the identical final price paid **zero**. The mechanism was decorative against
+anyone who bothered.
+
+### Built
+
+Each actor's fills stay revisitable for the rest of the block. Any further displacement they add
+later in the same block is charged as an *increment* against what the order has already been
+compensated for, so five swaps now cost exactly what one swap costs. The test asserts that
+equality rather than merely asserting a non-zero payment — "something was paid" would still leave
+the dodge worth attempting for a smaller discount.
+
+### Decisions
+
+**Compensation is tracked as displacement already paid for, in ticks.** Ticks are
+currency-agnostic, which is what lets a top-up land in a different currency than the original
+charge without double counting — and it means a price that retreats never produces a refund,
+because the increment is simply zero.
+
+**Keyed on `tx.origin`.** The question being asked is which actor kept pushing the price, and a
+router in between does not change the answer. This is accounting, not authorisation — `tx.origin`
+is unsuitable for the latter and exactly right for the former.
+
+**The revisit list is bounded.** It runs on the swap path, so it cannot be unbounded; an actor
+filling more than eight orders in a single block is already past what the fee makes worthwhile.
+
+### Challenges
+
+17. **The prank trap, third time, third costume.** `hook.createOrder(key, t, manager.getLiquidity(...) / 500)`
+    — the liquidity read sits in the *argument list*, so it executes after `vm.prank` and before
+    the call it was meant to authorise. Same underflow-from-nowhere signature as day 3 and day 5.
+    An external call in an argument is still an external call.
+
+---

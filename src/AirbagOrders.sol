@@ -57,6 +57,8 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         uint128 rebate1; // Airbag credit owed in currency1
         bool filled;
         uint32 tickIndex; // slot in the tick's waiting list, for O(1) removal
+        uint16 paidDisplacement; // bps of displacement already compensated, so top-ups only ever
+            // charge the increment and a price that retreats never refunds
     }
 
     enum Action {
@@ -88,6 +90,23 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     ///      away therefore cannot be used to exhaust the budget — a cheap-to-mount denial of
     ///      service I have shipped once before and do not intend to ship twice.
     uint256 internal constant MAX_FILL_SCAN = 64;
+
+    /// @dev How many of an actor's fills stay revisitable for the rest of the block. Bounded
+    ///      because the top-up walk runs on the swap path; an actor filling more than this in one
+    ///      block is beyond anything the fee makes worthwhile.
+    uint256 internal constant MAX_RECENT_FILLS = 8;
+
+    /// @dev An actor's fills from the current block, so displacement they add later in the same
+    ///      block still reaches the makers they already ran over. Without this, clearing a maker
+    ///      by a hair and then pushing the price the rest of the way in a second swap costs
+    ///      nothing: the pool fee is proportional, so splitting is free.
+    struct RecentFills {
+        uint64 blockNumber;
+        uint8 count;
+        uint256[8] ids;
+    }
+
+    mapping(bytes32 => RecentFills) private _recent;
 
     IPoolManager internal immutable _manager;
     uint256 public nextOrderId = 1;
@@ -157,7 +176,8 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             rebate0: 0,
             rebate1: 0,
             filled: false,
-            tickIndex: 0
+            tickIndex: 0,
+            paidDisplacement: 0
         });
         _mint(msg.sender, orderId);
 
@@ -285,6 +305,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         returns (uint256 total)
     {
         if (postTick == preTick) return 0;
+        total = _topUpRecentFills(poolId, ctx, postTick);
         int24 spacing = ctx.spacing;
         bool rising = postTick > preTick;
         int24 cursor = preTick;
@@ -327,6 +348,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             o.filled = true;
             emit OrderFilled(id, poolId, tick, postTick);
             subtotal += _priceFill(o, id, ctx, tick, postTick);
+            _rememberFill(poolId, id);
 
             uint256 last = bucket.length - 1;
             if (i != last) {
@@ -349,7 +371,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         returns (uint256 amount)
     {
         uint256 displacement = AirbagMath.displacementBps(o.zeroForOne, tick, ctx.spacing, postTick);
-        if (displacement == 0) return 0;
+        if (displacement <= o.paidDisplacement) return 0; // already compensated this far out
 
         uint160 sa = TickMath.getSqrtPriceAtTick(tick);
         uint160 sb = TickMath.getSqrtPriceAtTick(tick + ctx.spacing);
@@ -357,12 +379,55 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             ? SqrtPriceMath.getAmount0Delta(sa, sb, o.liquidity, false)
             : SqrtPriceMath.getAmount1Delta(sa, sb, o.liquidity, false);
 
-        amount = AirbagMath.chargeAmount(notional, displacement, ctx.thresholdBps, ctx.capBps);
-        if (amount == 0) return 0;
+        // Charge the increment, never the whole displacement again. Displacement is in ticks and
+        // so currency-agnostic, which is what lets a top-up land in a different currency than the
+        // original charge without double counting.
+        uint256 owedNow = AirbagMath.chargeAmount(notional, displacement, ctx.thresholdBps, ctx.capBps);
+        uint256 owedBefore =
+            AirbagMath.chargeAmount(notional, o.paidDisplacement, ctx.thresholdBps, ctx.capBps);
+        o.paidDisplacement = displacement > type(uint16).max ? type(uint16).max : uint16(displacement);
+        if (owedNow <= owedBefore) return 0;
+        amount = owedNow - owedBefore;
 
         if (ctx.chargeInCurrency0) o.rebate0 += uint128(amount);
         else o.rebate1 += uint128(amount);
         emit RebateCredited(id, ctx.chargeInCurrency0, amount, displacement);
+    }
+
+    /// @dev Revisit the fills this actor already caused in this block and charge for any further
+    ///      displacement they have since added. This is what makes splitting a swap pointless:
+    ///      the maker ends up owed the same whether they were run over in one move or five.
+    function _topUpRecentFills(PoolId poolId, ChargeCtx memory ctx, int24 postTick)
+        internal
+        returns (uint256 total)
+    {
+        RecentFills storage rf = _recent[_actorKey(poolId)];
+        if (rf.blockNumber != uint64(block.number)) return 0;
+        for (uint256 i; i < rf.count; ++i) {
+            uint256 id = rf.ids[i];
+            Order storage o = orders[id];
+            if (o.liquidity == 0) continue; // claimed or cancelled since
+            total += _priceFill(o, id, ctx, o.tickLower, postTick);
+        }
+    }
+
+    function _rememberFill(PoolId poolId, uint256 id) private {
+        RecentFills storage rf = _recent[_actorKey(poolId)];
+        if (rf.blockNumber != uint64(block.number)) {
+            rf.blockNumber = uint64(block.number);
+            rf.count = 0;
+        }
+        if (rf.count < MAX_RECENT_FILLS) {
+            rf.ids[rf.count] = id;
+            rf.count++;
+        }
+    }
+
+    /// @dev Keyed on tx.origin: the question is which actor kept pushing the price, and a router
+    ///      in between does not change that. This is accounting, not authorisation — tx.origin is
+    ///      unsuitable for the latter and perfectly suited to the former.
+    function _actorKey(PoolId poolId) private view returns (bytes32) {
+        return keccak256(abi.encode(poolId, tx.origin));
     }
 
     function _unlist(PoolId poolId, int24 tick, int24 spacing, uint32 idx) private {
