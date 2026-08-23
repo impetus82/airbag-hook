@@ -82,6 +82,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         address maker;
         int24 tickLower;
         uint128 liquidity;
+        uint256 orderId; // becomes the position salt — see _positionSalt
     }
 
     /// @dev A swap may sweep an unbounded number of ticks, so the fill walk is capped. The cap
@@ -111,6 +112,17 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     IPoolManager internal immutable _manager;
     uint256 public nextOrderId = 1;
     mapping(uint256 => Order) public orders;
+
+    /// @notice Give every order its own PoolManager position.
+    /// @dev v4 keys a position on (owner, tickLower, tickUpper, salt). With a constant salt every
+    ///      order at a tick would be ONE position owned by this hook, and `modifyLiquidity`
+    ///      settles a position's accrued fees to whoever touches it — so the first maker to
+    ///      withdraw would take the fees earned by the others, and a one-wei order placed after
+    ///      the fact would harvest them outright. Salting by order id makes each maker's fees
+    ///      structurally their own.
+    function _positionSalt(uint256 orderId) private pure returns (bytes32) {
+        return bytes32(orderId);
+    }
 
     /// @dev Ticks that currently host at least one waiting order, per pool.
     mapping(PoolId => mapping(int16 => uint256)) private _orderTicks;
@@ -193,7 +205,8 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
                     key: key,
                     maker: msg.sender,
                     tickLower: tickLower,
-                    liquidity: liquidity
+                    liquidity: liquidity,
+                    orderId: orderId
                 })
             )
         );
@@ -219,7 +232,8 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
                     key: key,
                     maker: msg.sender,
                     tickLower: o.tickLower,
-                    liquidity: o.liquidity
+                    liquidity: o.liquidity,
+                    orderId: orderId
                 })
             )
         );
@@ -247,7 +261,8 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
                     key: key,
                     maker: msg.sender,
                     tickLower: o.tickLower,
-                    liquidity: o.liquidity
+                    liquidity: o.liquidity,
+                    orderId: orderId
                 })
             )
         );
@@ -276,7 +291,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
                 tickLower: cb.tickLower,
                 tickUpper: cb.tickLower + cb.key.tickSpacing,
                 liquidityDelta: liquidityDelta,
-                salt: bytes32(0)
+                salt: _positionSalt(cb.orderId)
             }),
             ""
         );
@@ -308,7 +323,16 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         total = _topUpRecentFills(poolId, ctx, postTick);
         int24 spacing = ctx.spacing;
         bool rising = postTick > preTick;
-        int24 cursor = preTick;
+
+        // Seed one spacing below on the rising branch. v4's search with `lte == false` begins at
+        // `compress(tick) + 1`, so the word bit for preTick's own tick is excluded by
+        // construction — and that is precisely where a partially-crossed order sits. Starting at
+        // preTick would make every such order invisible to a rising sweep: never filled, never
+        // charged for, and never removed from the bitmap, so an ordinary two-leg price move would
+        // strand the maker with a position the market had already converted. The falling branch
+        // (`lte == true`) includes its starting tick, so it needs no adjustment; the asymmetry
+        // was the bug, not the design.
+        int24 cursor = rising ? preTick - ctx.spacing : preTick;
 
         for (uint256 steps; steps < MAX_FILL_SCAN; ++steps) {
             (int24 next, bool initialized) =

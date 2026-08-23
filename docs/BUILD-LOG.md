@@ -438,3 +438,60 @@ and the pool initialisation now get exercised against the actual PoolManager bef
 involved. Opt-in via `RUN_FORK_TESTS=1` so the default suite stays offline.
 
 ---
+
+## Day 11 — 23 Aug
+
+**Goal: audit the thing properly before spending real money on it.**
+
+### The audit
+
+Ran an adversarial pre-deployment review: five independent lenses over the contracts, then a
+separate skeptic per finding whose job was to *refute* it. 31 findings raised, 25 survived. The
+verdict was **do not ship** — eight blockers.
+
+Worth stating plainly: none of them risks a maker's principal or locks funds. The product breaks,
+not custody. But three separate ways existed to defeat the compensation mechanism outright,
+deterministically, for gas.
+
+It also refuted six plausible-sounding claims, which is the part that makes the rest credible:
+the take-then-return delta pairing, the unspecified-currency selection for *both* exact-input and
+exact-output, the int128/uint128 casts, unlock reentrancy, the swap-and-pop bookkeeping, and the
+edge-crossing predicates all hold.
+
+### Fixed today (group 1)
+
+**Every order now gets its own PoolManager position.** v4 keys a position on
+`(owner, tickLower, tickUpper, salt)`, and the salt was a constant — so every order at a tick was
+*one* position owned by the hook. `modifyLiquidity` settles a position's accrued fees to whoever
+touches it, which meant the first maker to withdraw took everyone else's fees, and a one-wei
+order placed after the fact harvested them outright. Measured before the fix: a 1-wei order
+walked away with 75,052,546,522,085 wei of another maker's fees. Salting by order id makes each
+maker's fees structurally their own.
+
+This one mattered beyond the theft: the entire threshold argument — *below the pool fee the maker
+is already compensated by the fee they earned on their own fill* — is only true if that fee is
+actually theirs.
+
+**The rising tick walk skipped the tick containing `preTick`.** v4's search with `lte == false`
+begins at `compress(tick) + 1`, so the starting tick's own bit is excluded by construction — and
+that is exactly where a partially-crossed order sits. Any order whose range contained `preTick`
+was invisible to a rising sweep: never filled, never charged for, never removed from the bitmap.
+The falling branch includes its starting tick, so the asymmetry was the bug rather than the
+design. Seeding one spacing lower on the rising branch fixes it.
+
+### Challenges
+
+18. **My own regression tests had a blind spot shaped exactly like the bug.** The fragmentation
+    tests from yesterday stopped their first leg on spacing boundaries — 20, 30, 40 — because
+    round numbers are what you reach for when writing a test by hand. That is the one alignment
+    this defect cannot reach. Stopping *strictly inside* a maker's range, which is the ordinary
+    case in real price action, exposed it immediately. A test suite can be green and blind at the
+    same time, and mine was.
+
+19. **The non-adversarial version was worse than the attack.** Ordinary two-leg price movement
+    left makers with a position the market had already converted and an order stuck unfilled:
+    `claimOrder` reverting forever, and the only exit a `cancelOrder` no interface would offer
+    for an order it displays as filled. Attacks get attention; this would have quietly stranded
+    ordinary users.
+
+---
