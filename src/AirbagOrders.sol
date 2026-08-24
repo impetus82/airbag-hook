@@ -46,6 +46,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     error OrderNotFilled();
     error OrderTooLargeForPool();
     error PoolHasNoLiquidity();
+    error OrderTooSmallForPool();
 
     struct Order {
         PoolId poolId;
@@ -55,6 +56,8 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         uint128 liquidity;
         uint128 rebate0; // Airbag credit owed in currency0
         uint128 rebate1; // Airbag credit owed in currency1
+        uint128 owed0; // proceeds banked at the moment of the fill
+        uint128 owed1;
         bool filled;
         uint32 tickIndex; // slot in the tick's waiting list, for O(1) removal
         uint16 paidDisplacement; // bps of displacement already compensated, so top-ups only ever
@@ -97,6 +100,19 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     ///      block is beyond anything the fee makes worthwhile.
     uint256 internal constant MAX_RECENT_FILLS = 8;
 
+    /// @dev Ceiling on ORDERS settled in one swap, distinct from the tick budget above. Settling
+    ///      a fill removes a position and takes tokens, so its cost is real; without a cap, a
+    ///      single tick crowded with orders makes crossing that price level cost unbounded gas
+    ///      and eventually revert every swap that tries — a price level anyone could wall off.
+    ///      Truncation must only ever DEFER a fill, never cancel it: see settleFills.
+    uint256 internal constant MAX_FILLS_PER_SWAP = 24;
+
+    /// @dev Orders must be at least this fraction of the pool's active liquidity (1/10000 = 1bp
+    ///      of the pool). The tick and fill budgets are spent per order, so without a floor on
+    ///      size they can be exhausted with dust: 64 one-wei orders cost an attacker nothing and
+    ///      starve a real maker of their fill. A floor makes a wall cost real capital.
+    uint256 internal constant MIN_ORDER_SHARE_DIVISOR = 10_000;
+
     /// @dev An actor's fills from the current block, so displacement they add later in the same
     ///      block still reaches the makers they already ran over. Without this, clearing a maker
     ///      by a hair and then pushing the price the rest of the way in a second swap costs
@@ -136,6 +152,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     event OrderFilled(uint256 indexed orderId, PoolId indexed poolId, int24 tickLower, int24 postTick);
     event RebateCredited(uint256 indexed orderId, bool inCurrency0, uint256 amount, uint256 displacementBps);
     event FillScanTruncated(PoolId indexed poolId, int24 reachedTick);
+    event FillsDeferred(PoolId indexed poolId, int24 atTick);
 
     constructor(IPoolManager manager_) ERC721("Airbag Limit Order", "AIRBAG") {
         _manager = manager_;
@@ -177,6 +194,9 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         if (uint256(liquidity) * 10_000 > uint256(poolLiquidity) * MAX_ORDER_SHARE_BPS) {
             revert OrderTooLargeForPool();
         }
+        if (uint256(liquidity) * MIN_ORDER_SHARE_DIVISOR < uint256(poolLiquidity)) {
+            revert OrderTooSmallForPool();
+        }
 
         orderId = nextOrderId++;
         orders[orderId] = Order({
@@ -187,6 +207,8 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             liquidity: liquidity,
             rebate0: 0,
             rebate1: 0,
+            owed0: 0,
+            owed1: 0,
             filled: false,
             tickIndex: 0,
             paidDisplacement: 0
@@ -254,25 +276,12 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         delete orders[orderId];
         _burn(orderId);
 
-        _manager.unlock(
-            abi.encode(
-                Callback({
-                    action: Action.Remove,
-                    key: key,
-                    maker: msg.sender,
-                    tickLower: o.tickLower,
-                    liquidity: o.liquidity,
-                    orderId: orderId
-                })
-            )
-        );
-
-        if (o.rebate0 != 0) {
-            IERC20(Currency.unwrap(key.currency0)).safeTransfer(msg.sender, o.rebate0);
-        }
-        if (o.rebate1 != 0) {
-            IERC20(Currency.unwrap(key.currency1)).safeTransfer(msg.sender, o.rebate1);
-        }
+        // Nothing to unwind: the position was removed and the proceeds banked at the moment of
+        // the fill, so a claim is a transfer of tokens this contract already holds.
+        uint256 pay0 = uint256(o.owed0) + o.rebate0;
+        uint256 pay1 = uint256(o.owed1) + o.rebate1;
+        if (pay0 != 0) IERC20(Currency.unwrap(key.currency0)).safeTransfer(msg.sender, pay0);
+        if (pay1 != 0) IERC20(Currency.unwrap(key.currency1)).safeTransfer(msg.sender, pay1);
 
         emit OrderClaimed(orderId, msg.sender, o.rebate0, o.rebate1);
     }
@@ -305,6 +314,8 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     ///      one pass over the same orders. Two passes could disagree, and a maker filled without
     ///      being compensated is the one outcome this hook exists to prevent.
     struct ChargeCtx {
+        PoolKey key;
+        uint256 fillBudget; // orders left to settle in this swap; mutated as the walk proceeds
         int24 spacing;
         uint256 thresholdBps; // the pool's own fee
         uint256 capBps;
@@ -347,6 +358,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             }
 
             if (initialized) total += _fillBucket(poolId, ctx, next, postTick);
+            if (ctx.fillBudget == 0) return total;
             cursor = rising ? next : next - spacing;
         }
         emit FillScanTruncated(poolId, cursor);
@@ -368,10 +380,16 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             // Both directions can rest on the same tick at different times, so decide per order.
             bool crossed = o.zeroForOne ? (postTick >= tick + spacing) : (postTick < tick);
             if (!crossed) continue;
+            if (ctx.fillBudget == 0) {
+                emit FillsDeferred(poolId, tick);
+                return subtotal; // deferred, not lost — settleFills picks these up
+            }
+            ctx.fillBudget--;
 
             o.filled = true;
             emit OrderFilled(id, poolId, tick, postTick);
             subtotal += _priceFill(o, id, ctx, tick, postTick);
+            _bankProceeds(ctx, o, id, tick);
             _rememberFill(poolId, id);
 
             uint256 last = bucket.length - 1;
@@ -383,6 +401,40 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             bucket.pop();
         }
         if (bucket.length == 0 && len != 0) _orderTicks[poolId].flipTick(tick, spacing);
+    }
+
+    /// @notice Take the maker's proceeds out of the pool the moment their order fills.
+    /// @dev Without this, "filled" is only a flag over a position the market still owns, and a
+    ///      price retrace converts it straight back into the token the maker had already sold —
+    ///      an order that un-executes. Worse, it made that reachable on purpose: a round trip
+    ///      through someone's range, atomically and permissionlessly, undid their fill.
+    ///
+    ///      Doing it here needs no keeper and no deferred settlement: `afterSwap` already runs
+    ///      inside the manager's unlock. Removing a position that now sits entirely out of range
+    ///      returns one-sided tokens and does not move the tick, so it cannot disturb the
+    ///      displacement this same call just measured. Accrued fees come out with it, which is
+    ///      exactly right — they are the maker's, and the threshold argument depends on that.
+    function _bankProceeds(ChargeCtx memory ctx, Order storage o, uint256 id, int24 tick) private {
+        (BalanceDelta delta,) = _manager.modifyLiquidity(
+            ctx.key,
+            ModifyLiquidityParams({
+                tickLower: tick,
+                tickUpper: tick + ctx.spacing,
+                liquidityDelta: -int256(uint256(o.liquidity)),
+                salt: _positionSalt(id)
+            }),
+            ""
+        );
+        int128 a0 = delta.amount0();
+        int128 a1 = delta.amount1();
+        if (a0 > 0) {
+            _manager.take(ctx.key.currency0, address(this), uint128(a0));
+            o.owed0 = uint128(a0);
+        }
+        if (a1 > 0) {
+            _manager.take(ctx.key.currency1, address(this), uint128(a1));
+            o.owed1 = uint128(a1);
+        }
     }
 
     /// @dev What this fill is worth to its maker, and book it.
@@ -430,7 +482,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         for (uint256 i; i < rf.count; ++i) {
             uint256 id = rf.ids[i];
             Order storage o = orders[id];
-            if (o.liquidity == 0) continue; // claimed or cancelled since
+            if (!o.filled) continue; // claimed or cancelled since (a deleted order reads false)
             total += _priceFill(o, id, ctx, o.tickLower, postTick);
         }
     }

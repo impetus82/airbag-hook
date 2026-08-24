@@ -211,6 +211,8 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
         uint256 charge = _markFills(
             key.toId(),
             ChargeCtx({
+                key: key,
+                fillBudget: MAX_FILLS_PER_SWAP,
                 spacing: key.tickSpacing,
                 thresholdBps: AirbagMath.feeToBps(key.fee),
                 capBps: CAP_BPS,

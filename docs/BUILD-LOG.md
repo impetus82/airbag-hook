@@ -495,3 +495,49 @@ design. Seeding one spacing lower on the rising branch fixes it.
     ordinary users.
 
 ---
+
+## Day 12 — 23 Aug (same session)
+
+**Goal: a fill has to be final, and a wall has to cost something to build.**
+
+### Fixed (blockers 3, 4, 5)
+
+**Proceeds are taken out of the pool at the moment of the fill.** Until now "filled" was a flag
+over a position the market still owned, so a price retrace converted it straight back into the
+token the maker had already sold — and a deliberate round trip through someone's range undid
+their fill, atomically and permissionlessly. Measured before the fix: after a retrace the maker
+was handed back 50,072,441,031,415,115 of the token they had sold and 250,300,205,112 of the one
+they wanted. Their sale had simply un-happened.
+
+This needs no keeper and no deferred settlement: `afterSwap` already runs inside the manager's
+unlock. Removing a position that now sits wholly out of range returns one-sided tokens and does
+not move the tick, so it cannot disturb the displacement measured moments earlier in the same
+call. `claimOrder` becomes a transfer of tokens the contract already holds.
+
+**A per-swap fill budget, and a floor on order size.** Settling a fill now costs real gas, which
+made the crowded-tick problem worse rather than better, so the two had to be fixed together. The
+tick budget counted ticks, not orders, so one tick packed with orders made crossing that price
+level cost unbounded gas — a wall anyone could erect. And every starvation attack was affordable
+only because dust was free: one-wei orders could exhaust the budget and starve a real maker of
+their fill.
+
+Orders must now be at least 1 bp of the pool's active liquidity, and a swap settles at most 24
+fills. Crucially, truncation only ever *defers*: a later pass through the same region picks the
+remainder up, and there is a test for that specifically. A budget that silently cancelled fills
+would have replaced a gas problem with a correctness one.
+
+### Challenges
+
+20. **The audit's own proof-of-concept files got committed.** Four `Zz*` scratch files written by
+    the review tooling to demonstrate the attacks ended up in yesterday's commit and therefore in
+    a public repo. They are throwaway demonstrations, not maintained tests, and once the fixes
+    landed they started failing — because they were written to prove the attacks *work*. Removed,
+    and the properties they established rewritten as named regressions. Worth watching for: tools
+    that write into the working tree leave their scaffolding behind.
+
+21. **The prank trap, fourth time.** `hook.createOrder(key, 10, _minSize())` — the helper reads
+    pool liquidity, so once more an external call in an argument position consumed the prank. At
+    this point it is not a surprise, it is a habit I have to break: resolve every value before
+    pranking, without exception.
+
+---

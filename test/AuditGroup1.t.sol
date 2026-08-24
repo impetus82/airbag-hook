@@ -150,12 +150,20 @@ contract AuditGroup1Test is Test, Deployers {
         _pushTo(0);
         _pushTo(60); // Alice's position has accrued fees crossing back and forth
 
-        // The payout happens on the ADD, not the claim: modifyLiquidity settles the position's
-        // accrued fees to whoever touches it. So measure across join-then-leave.
+        // Two independent defences now stand between Mallory and Alice's fees, and the test
+        // pins both. First: dust cannot be placed at all, so the cheap version of the attack
+        // never reaches the position.
+        vm.prank(mallory);
+        vm.expectRevert(AirbagOrders.OrderTooSmallForPool.selector);
+        hook.createOrder(key, 10, 1);
+
+        // Second, and the one that actually matters: even a fully-sized order joining the same
+        // tick gets its own position, so it cannot touch what Alice's has accrued.
+        uint128 size = uint128(manager.getLiquidity(key.toId()) / 5_000);
         uint256 before1 = IERC20(Currency.unwrap(currency1)).balanceOf(mallory);
         uint256 before0 = IERC20(Currency.unwrap(currency0)).balanceOf(mallory);
 
-        uint256 m = _place(mallory, 10, 1);
+        uint256 m = _place(mallory, 10, size);
         vm.prank(mallory);
         hook.cancelOrder(m, key);
 
@@ -163,7 +171,7 @@ contract AuditGroup1Test is Test, Deployers {
         uint256 got0 = IERC20(Currency.unwrap(currency0)).balanceOf(mallory);
         uint256 gained = (got1 > before1 ? got1 - before1 : 0) + (got0 > before0 ? got0 - before0 : 0);
 
-        assertLt(gained, 1000, "a one-wei order must not harvest a real maker's accrued fees");
+        assertEq(gained, 0, "joining a tick must not pay out another maker's accrued fees");
         assertTrue(a != 0, "sanity");
     }
 }

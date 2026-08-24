@@ -125,7 +125,7 @@ contract AirbagFillsTest is Test, Deployers {
             // which would otherwise consume the prank and send createOrder from this contract.
             int24 t = _alignedTick(int24(int256(i)) + 1);
             vm.prank(maker);
-            ids[i] = hook.createOrder(key, t, 1e17);
+            ids[i] = hook.createOrder(key, t, 1e18);
         }
 
         _pushTo(_alignedTick(9));
