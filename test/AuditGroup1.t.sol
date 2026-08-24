@@ -120,8 +120,11 @@ contract AuditGroup1Test is Test, Deployers {
     ///      accrued belonged to whoever withdrew first. Two makers at the same tick must each
     ///      leave with their own share, and neither should be able to take the other's.
     function test_makersAtTheSameTickDoNotShareEachOthersFees() public {
-        uint256 a = _place(alice, 10, 1e20);
-        uint256 b = _place(mallory, 10, 1e20);
+        // Sized so both fit under the cumulative per-tick cap: the point here is fee isolation
+        // between two makers sharing a tick, not the cap itself.
+        uint128 each = uint128(manager.getLiquidity(key.toId()) / 400);
+        uint256 a = _place(alice, 10, each);
+        uint256 b = _place(mallory, 10, each);
 
         _pushTo(60);
         _pushTo(0); // round trip so the shared position accrues fees on the way through
@@ -145,7 +148,8 @@ contract AuditGroup1Test is Test, Deployers {
     /// @dev The adversarial version: a one-wei order placed after the fact must not entitle its
     ///      owner to any of a real maker's accrued fees.
     function test_dustOrderCannotHarvestAnotherMakersFees() public {
-        uint256 a = _place(alice, 10, 1e20);
+        uint128 sz = uint128(manager.getLiquidity(key.toId()) / 400);
+        uint256 a = _place(alice, 10, sz);
         _pushTo(60);
         _pushTo(0);
         _pushTo(60); // Alice's position has accrued fees crossing back and forth
@@ -159,7 +163,7 @@ contract AuditGroup1Test is Test, Deployers {
 
         // Second, and the one that actually matters: even a fully-sized order joining the same
         // tick gets its own position, so it cannot touch what Alice's has accrued.
-        uint128 size = uint128(manager.getLiquidity(key.toId()) / 5_000);
+        uint128 size = uint128(manager.getLiquidity(key.toId()) / 400);
         uint256 before1 = IERC20(Currency.unwrap(currency1)).balanceOf(mallory);
         uint256 before0 = IERC20(Currency.unwrap(currency0)).balanceOf(mallory);
 

@@ -47,6 +47,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     error OrderTooLargeForPool();
     error PoolHasNoLiquidity();
     error OrderTooSmallForPool();
+    error TickTooCrowded();
 
     struct Order {
         PoolId poolId;
@@ -148,6 +149,12 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     mapping(PoolId => mapping(int16 => uint256)) private _orderTicks;
     mapping(PoolId => mapping(int24 => uint256[])) private _waiting;
 
+    /// @dev Liquidity currently resting at each tick. The size cap was per ORDER, which bounded
+    ///      nothing: N calls just under the limit pile up arbitrarily much at one price, and the
+    ///      wall it exists to prevent gets built one brick at a time. Concentration is the thing
+    ///      being limited, so the limit has to be cumulative.
+    mapping(PoolId => mapping(int24 => uint128)) private _tickLiquidity;
+
     event OrderCreated(
         uint256 indexed orderId, address indexed maker, PoolId indexed poolId, int24 tickLower, bool zeroForOne, uint128 liquidity
     );
@@ -201,6 +208,9 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         if (uint256(liquidity) * MIN_ORDER_SHARE_DIVISOR < uint256(poolLiquidity)) {
             revert OrderTooSmallForPool();
         }
+        uint256 atTick = uint256(_tickLiquidity[key.toId()][tickLower]) + liquidity;
+        if (atTick * 10_000 > uint256(poolLiquidity) * MAX_ORDER_SHARE_BPS) revert TickTooCrowded();
+        _tickLiquidity[key.toId()][tickLower] = uint128(atTick);
 
         orderId = nextOrderId++;
         orders[orderId] = Order({
@@ -248,6 +258,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         if (o.filled) revert OrderAlreadyFilled();
         if (PoolId.unwrap(key.toId()) != PoolId.unwrap(o.poolId)) revert PoolKeyMismatch();
 
+        _tickLiquidity[o.poolId][o.tickLower] -= o.liquidity;
         _unlist(o.poolId, o.tickLower, o.tickSpacing, o.tickIndex);
         delete orders[orderId];
         _burn(orderId);
@@ -393,6 +404,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
 
             o.filled = true;
             o.filledBlock = uint64(block.number);
+            _tickLiquidity[poolId][tick] -= o.liquidity;
             emit OrderFilled(id, poolId, tick, postTick);
             subtotal += _priceFill(o, id, ctx, tick, postTick, o.paidDisplacement);
             _bankProceeds(ctx, o, id, tick);

@@ -110,6 +110,26 @@ contract AuditGroup3Test is Test, Deployers {
         assertLt(used, 15_000_000, "crossing a crowded tick must fit comfortably in a block");
     }
 
+    /// @dev The size cap was per ORDER, so it bounded nothing: N calls just below the limit pile
+    ///      up arbitrarily much at one price. The cap has to be cumulative per tick, or the wall
+    ///      it is supposed to prevent is simply built one brick at a time.
+    function test_sizeCapIsCumulativePerTick() public {
+        uint128 poolLiq = manager.getLiquidity(key.toId());
+        uint128 justUnder = poolLiq / 100; // exactly the 1% ceiling
+
+        vm.prank(mallory);
+        hook.createOrder(key, 10, justUnder);
+
+        // A second order of the same size at the same tick would put 2% of the pool on one price.
+        vm.prank(mallory);
+        vm.expectRevert(AirbagOrders.TickTooCrowded.selector);
+        hook.createOrder(key, 10, justUnder);
+
+        // A different tick is fine — the limit is about concentration, not about the maker.
+        vm.prank(mallory);
+        hook.createOrder(key, 20, justUnder);
+    }
+
     /// @dev And truncation must only defer. A maker beyond the budget is still owed their fill,
     ///      so a later swap through the same region has to pick them up rather than leave them
     ///      crossed-but-unfilled forever.

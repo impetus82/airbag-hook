@@ -579,3 +579,43 @@ bytecode at deploy time, and the deploy script asserts the match rather than tru
 is exactly why it was written that way.
 
 ---
+
+## Day 14 — 23 Aug (same session)
+
+**Goal: make the size cap actually cap something. Last of the eight blockers.**
+
+### Fixed (blocker 8)
+
+The cap was per *order*, so it bounded nothing: N calls just under the limit pile up arbitrarily
+much at one price, and the wall it exists to prevent gets built one brick at a time.
+Concentration is the thing being limited, so the limit is now cumulative — the hook tracks
+liquidity resting at each tick and refuses an order that would push that tick past the ceiling.
+Liquidity is released back on cancel and on fill.
+
+### Honest limits, stated rather than papered over
+
+The cap is measured against the pool's *active* liquidity read at creation, which is
+manipulable: add liquidity around spot, place a maximal order, remove the liquidity again. Doing
+that properly needs a time-weighted measure the hook cannot read in-transaction without an
+oracle, and this design does not have one.
+
+What makes that acceptable rather than ignored is that the damage it used to enable is now
+bounded elsewhere. An inflated order cannot extract an oversized charge, because the delta is
+clamped to what the paying swap actually received. It cannot wall off a price level, because the
+per-swap fill budget bounds the cost of crossing one and a later pass settles the remainder. What
+is left is a large order that dampens its own displacement and mostly disadvantages its owner.
+
+This is worth writing down as it is, rather than claiming a guarantee the code does not provide.
+
+### Where that leaves the audit
+
+All eight blockers are closed. The non-blocking findings remain open and are next: the rho
+discontinuity at the switch — where a maker run over *further* is paid 14% less, and the
+project's own monotonicity test misses it because it checks the rounded view rather than the
+money path — plus native-currency pools, dynamic-fee pools, the missing `key.hooks` check, and
+keying the transient slot by pool.
+
+Then the whole thing goes back through review before anything is deployed. Fixes this deep earn
+a second pass, not a victory lap.
+
+---
