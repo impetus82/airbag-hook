@@ -541,3 +541,41 @@ would have replaced a gas problem with a correctness one.
     pranking, without exception.
 
 ---
+
+## Day 13 — 23 Aug (same session)
+
+**Goal: charge the right party for the right movement, and never bill a trade more than it made.**
+
+### Fixed (blockers 6, 7)
+
+**Top-up accounting moved from the actor to the pool.** It was keyed on `tx.origin`, which was
+wrong in both directions at once. A filler with two wallets sent the second leg from a different
+address and paid nothing — measured at zero against 4,371,938,768,347 for the same price path
+from one address. And anyone *sharing* an origin — a bundler, a relayer, a 4337 bundle, a CoW
+solver — was billed for a move they had not made.
+
+The question a top-up answers is "did the market end up further past this maker", and the market
+does not care which address pushed it. Keyed on the pool, both problems disappear: a second
+wallet buys no discount, and no unrelated party is billed at all. The fixed eight-entry list also
+went, and dust can no longer evict anyone now that orders have a size floor.
+
+**The top-up base is this swap's own starting price.** Previously a swap inherited whatever the
+price had already done and was billed for a level it did not set. The base is now
+`max(already paid for, displacement at this swap's preTick)`, so a trade pays for its own
+movement and nothing else.
+
+**The returned delta is clamped to what the swap actually received.** A top-up is sized from the
+*order's* notional, which bears no relation to whichever swap moves the price next, so a small
+trade could be handed a delta several times its own output and simply revert. Under-collecting is
+strictly better than destroying someone else's trade — and the shortfall is not written off,
+since `paidDisplacement` only advances by what was actually charged, so a later swap picks up the
+rest.
+
+### Note to self
+
+Every one of these changes alters the creation code, and therefore the mined hook address. The
+addresses recorded on day 10 are stale; the prediction has to be re-run against the final
+bytecode at deploy time, and the deploy script asserts the match rather than trusting it — which
+is exactly why it was written that way.
+
+---

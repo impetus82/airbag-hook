@@ -58,6 +58,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         uint128 rebate1; // Airbag credit owed in currency1
         uint128 owed0; // proceeds banked at the moment of the fill
         uint128 owed1;
+        uint64 filledBlock; // top-ups only ever apply within the block the fill happened in
         bool filled;
         uint32 tickIndex; // slot in the tick's waiting list, for O(1) removal
         uint16 paidDisplacement; // bps of displacement already compensated, so top-ups only ever
@@ -95,10 +96,13 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     ///      service I have shipped once before and do not intend to ship twice.
     uint256 internal constant MAX_FILL_SCAN = 64;
 
-    /// @dev How many of an actor's fills stay revisitable for the rest of the block. Bounded
-    ///      because the top-up walk runs on the swap path; an actor filling more than this in one
-    ///      block is beyond anything the fee makes worthwhile.
-    uint256 internal constant MAX_RECENT_FILLS = 8;
+    /// @dev How many of a POOL's fills stay revisitable for the rest of the block.
+    ///      Deliberately keyed on the pool rather than on the actor: the question a top-up
+    ///      answers is "did the market end up further past this maker", and the market does not
+    ///      care which address pushed it. Keying on tx.origin meant a second wallet bought a
+    ///      discount, and simultaneously billed whoever happened to share an origin — a bundler,
+    ///      a relayer, a 4337 bundle, a CoW solver — for a move they did not make.
+    uint256 internal constant MAX_BLOCK_FILLS = 32;
 
     /// @dev Ceiling on ORDERS settled in one swap, distinct from the tick budget above. Settling
     ///      a fill removes a position and takes tokens, so its cost is real; without a cap, a
@@ -113,17 +117,17 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     ///      starve a real maker of their fill. A floor makes a wall cost real capital.
     uint256 internal constant MIN_ORDER_SHARE_DIVISOR = 10_000;
 
-    /// @dev An actor's fills from the current block, so displacement they add later in the same
-    ///      block still reaches the makers they already ran over. Without this, clearing a maker
-    ///      by a hair and then pushing the price the rest of the way in a second swap costs
-    ///      nothing: the pool fee is proportional, so splitting is free.
-    struct RecentFills {
+    /// @dev A pool's fills from the current block, so displacement added later in the same block
+    ///      still reaches the makers already run over. Without this, clearing a maker by a hair
+    ///      and pushing the price the rest of the way in a second swap costs nothing, since the
+    ///      pool fee is proportional and splitting is therefore free.
+    struct BlockFills {
         uint64 blockNumber;
-        uint8 count;
-        uint256[8] ids;
+        uint16 count;
+        uint256[32] ids;
     }
 
-    mapping(bytes32 => RecentFills) private _recent;
+    mapping(PoolId => BlockFills) private _blockFills;
 
     IPoolManager internal immutable _manager;
     uint256 public nextOrderId = 1;
@@ -209,6 +213,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             rebate1: 0,
             owed0: 0,
             owed1: 0,
+            filledBlock: 0,
             filled: false,
             tickIndex: 0,
             paidDisplacement: 0
@@ -331,7 +336,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         returns (uint256 total)
     {
         if (postTick == preTick) return 0;
-        total = _topUpRecentFills(poolId, ctx, postTick);
+        total = _topUpBlockFills(poolId, ctx, preTick, postTick);
         int24 spacing = ctx.spacing;
         bool rising = postTick > preTick;
 
@@ -387,8 +392,9 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             ctx.fillBudget--;
 
             o.filled = true;
+            o.filledBlock = uint64(block.number);
             emit OrderFilled(id, poolId, tick, postTick);
-            subtotal += _priceFill(o, id, ctx, tick, postTick);
+            subtotal += _priceFill(o, id, ctx, tick, postTick, o.paidDisplacement);
             _bankProceeds(ctx, o, id, tick);
             _rememberFill(poolId, id);
 
@@ -442,12 +448,16 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     ///      denominated in the same currency the charge is collected in — otherwise the bps are
     ///      being applied across a units boundary. For a fully converted single-tick position
     ///      both denominations are exactly computable, so we take the matching one.
-    function _priceFill(Order storage o, uint256 id, ChargeCtx memory ctx, int24 tick, int24 postTick)
-        private
-        returns (uint256 amount)
-    {
+    function _priceFill(
+        Order storage o,
+        uint256 id,
+        ChargeCtx memory ctx,
+        int24 tick,
+        int24 postTick,
+        uint256 base
+    ) private returns (uint256 amount) {
         uint256 displacement = AirbagMath.displacementBps(o.zeroForOne, tick, ctx.spacing, postTick);
-        if (displacement <= o.paidDisplacement) return 0; // already compensated this far out
+        if (displacement <= base) return 0; // already compensated this far out
 
         uint160 sa = TickMath.getSqrtPriceAtTick(tick);
         uint160 sb = TickMath.getSqrtPriceAtTick(tick + ctx.spacing);
@@ -459,8 +469,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         // so currency-agnostic, which is what lets a top-up land in a different currency than the
         // original charge without double counting.
         uint256 owedNow = AirbagMath.chargeAmount(notional, displacement, ctx.thresholdBps, ctx.capBps);
-        uint256 owedBefore =
-            AirbagMath.chargeAmount(notional, o.paidDisplacement, ctx.thresholdBps, ctx.capBps);
+        uint256 owedBefore = AirbagMath.chargeAmount(notional, base, ctx.thresholdBps, ctx.capBps);
         o.paidDisplacement = displacement > type(uint16).max ? type(uint16).max : uint16(displacement);
         if (owedNow <= owedBefore) return 0;
         amount = owedNow - owedBefore;
@@ -470,40 +479,38 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         emit RebateCredited(id, ctx.chargeInCurrency0, amount, displacement);
     }
 
-    /// @dev Revisit the fills this actor already caused in this block and charge for any further
-    ///      displacement they have since added. This is what makes splitting a swap pointless:
-    ///      the maker ends up owed the same whether they were run over in one move or five.
-    function _topUpRecentFills(PoolId poolId, ChargeCtx memory ctx, int24 postTick)
+    /// @notice Charge for any further displacement added to makers already filled this block.
+    /// @dev The base is deliberately `max(already paid for, displacement at THIS swap's own
+    ///      preTick)`. Without the second term a swap inherits the whole move that preceded it and
+    ///      is billed for a price it did not set — which was not hypothetical: an unrelated swap
+    ///      could be charged many times what the actual crosser paid, and one moving the price
+    ///      back TOWARDS the maker could be charged at all.
+    function _topUpBlockFills(PoolId poolId, ChargeCtx memory ctx, int24 preTick, int24 postTick)
         internal
         returns (uint256 total)
     {
-        RecentFills storage rf = _recent[_actorKey(poolId)];
-        if (rf.blockNumber != uint64(block.number)) return 0;
-        for (uint256 i; i < rf.count; ++i) {
-            uint256 id = rf.ids[i];
+        BlockFills storage bf = _blockFills[poolId];
+        if (bf.blockNumber != uint64(block.number)) return 0;
+        for (uint256 i; i < bf.count; ++i) {
+            uint256 id = bf.ids[i];
             Order storage o = orders[id];
-            if (!o.filled) continue; // claimed or cancelled since (a deleted order reads false)
-            total += _priceFill(o, id, ctx, o.tickLower, postTick);
+            if (!o.filled) continue; // claimed since
+            uint256 base = AirbagMath.displacementBps(o.zeroForOne, o.tickLower, ctx.spacing, preTick);
+            if (base < o.paidDisplacement) base = o.paidDisplacement;
+            total += _priceFill(o, id, ctx, o.tickLower, postTick, base);
         }
     }
 
     function _rememberFill(PoolId poolId, uint256 id) private {
-        RecentFills storage rf = _recent[_actorKey(poolId)];
-        if (rf.blockNumber != uint64(block.number)) {
-            rf.blockNumber = uint64(block.number);
-            rf.count = 0;
+        BlockFills storage bf = _blockFills[poolId];
+        if (bf.blockNumber != uint64(block.number)) {
+            bf.blockNumber = uint64(block.number);
+            bf.count = 0;
         }
-        if (rf.count < MAX_RECENT_FILLS) {
-            rf.ids[rf.count] = id;
-            rf.count++;
+        if (bf.count < MAX_BLOCK_FILLS) {
+            bf.ids[bf.count] = id;
+            bf.count++;
         }
-    }
-
-    /// @dev Keyed on tx.origin: the question is which actor kept pushing the price, and a router
-    ///      in between does not change that. This is accounting, not authorisation — tx.origin is
-    ///      unsuitable for the latter and perfectly suited to the former.
-    function _actorKey(PoolId poolId) private view returns (bytes32) {
-        return keccak256(abi.encode(poolId, tx.origin));
     }
 
     function _unlist(PoolId poolId, int24 tick, int24 spacing, uint32 idx) private {

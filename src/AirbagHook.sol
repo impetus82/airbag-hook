@@ -190,7 +190,13 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
 
     /// @notice Settle every order the swap crossed. The displacement charge and the ERC-721
     ///         credit land on top of this, using the same (preTick, postTick) pair.
-    function afterSwap(address, PoolKey calldata key, SwapParams calldata params, BalanceDelta, bytes calldata)
+    function afterSwap(
+        address,
+        PoolKey calldata key,
+        SwapParams calldata params,
+        BalanceDelta swapDelta,
+        bytes calldata
+    )
         external
         override
         onlyPoolManager
@@ -222,6 +228,17 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
             postTick
         );
 
+        if (charge == 0) return (IHooks.afterSwap.selector, int128(0));
+
+        // Never ask a swap for more than it actually received. A top-up is sized from the
+        // ORDER's notional, which has no relation to the size of whichever swap happens to move
+        // the price next — so a small trade could be handed a delta several times its own output
+        // and simply revert. Under-collecting is strictly better than destroying someone's trade;
+        // the shortfall is not written off either, because paidDisplacement is only advanced by
+        // what was actually charged, so a later swap picks the rest up.
+        int128 received = chargeInCurrency0 ? swapDelta.amount0() : swapDelta.amount1();
+        uint256 payable_ = received > 0 ? uint256(uint128(received)) : 0;
+        if (charge > payable_) charge = payable_;
         if (charge == 0) return (IHooks.afterSwap.selector, int128(0));
 
         // Take first, then return the matching delta: the take leaves the hook owing the pool,
