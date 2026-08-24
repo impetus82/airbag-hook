@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {Deployers} from "@uniswap/v4-core/test/utils/Deployers.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
+import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Hooks} from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
@@ -58,6 +59,19 @@ contract AuditGroup3Test is Test, Deployers {
         IERC20(Currency.unwrap(currency0)).approve(address(hook), type(uint256).max);
         IERC20(Currency.unwrap(currency1)).approve(address(hook), type(uint256).max);
         vm.stopPrank();
+    }
+
+    /// @dev An order in a pool this hook is not attached to can never fill and never be
+    ///      compensated, because the callbacks never arrive — while the NFT and any interface
+    ///      would show it as live and protected. Refusing beats accepting something inert.
+    function test_orderInAForeignPoolIsRefused() public {
+        PoolKey memory foreign = key;
+        foreign.hooks = IHooks(address(0));
+
+        uint128 size = _minSize();
+        vm.prank(mallory);
+        vm.expectRevert(AirbagOrders.WrongPool.selector);
+        hook.createOrder(foreign, 10, size);
     }
 
     function _minSize() internal view returns (uint128) {

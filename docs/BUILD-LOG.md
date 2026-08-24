@@ -619,3 +619,38 @@ Then the whole thing goes back through review before anything is deployed. Fixes
 a second pass, not a victory lap.
 
 ---
+
+## Day 15 — 23 Aug (same session)
+
+**Goal: the five non-blocking findings, including the one my own test lied about.**
+
+### Fixed
+
+**The rate switch no longer has a cliff.** Applying the near rate to the *whole* excess and then
+switching made the payout step backwards: at a 5 bp threshold, 11 bps of displacement paid 14%
+less than 10 bps did — a maker run over further took home less. The rate is now marginal, the way
+a tax bracket works: the near rate applies only to the excess that actually falls in the near
+band. Monotone by construction rather than by luck, and makers are paid slightly more throughout.
+
+**And the test that was supposed to catch it now can.** The monotonicity property was fuzzed
+against `chargeBps` — the *rounded view* — where dividing by 10,000 flattened the very jump it
+existed to detect. It passed for weeks while the money path was discontinuous. It now fuzzes
+`chargeAmount`, and fuzzes the fee too, since the cliff's position depends on the threshold. A
+test aimed at the wrong function is worse than no test: it occupies the space where a real one
+would have gone.
+
+**Three guards at the door.** An order in a pool this hook is not attached to could never fill or
+be compensated while looking live to any interface; native-currency pools would fail deep inside
+somebody's swap because settlement uses `transferFrom` and there is no `receive()`;
+dynamic-fee pools have no fixed fee for the threshold argument to stand on and would have
+computed a charge of exactly zero — silently, which is the worst way to be wrong. All three are
+now refused at creation with named errors, rather than half-supported.
+
+**The pool's fee is read from `slot0`, not from the key.** Same call already being made, and
+`slot0` is the authoritative value.
+
+**The transient pre-tick slot is mixed with the pool id.** A single slot is safe today only
+because v4 makes no external call between `beforeSwap` and `afterSwap` — a property of the
+framework, not of this contract, and the hook is immutable.
+
+---

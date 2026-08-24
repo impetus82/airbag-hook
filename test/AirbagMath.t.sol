@@ -62,8 +62,9 @@ contract AirbagMathTest is Test {
         // Integer division rounds the charge DOWN, i.e. against the maker and in favour of the
         // party being charged. That is the correct direction to err when taking someone's money.
         assertEq(AirbagMath.chargeBps(9, fee, 1000), uint256(2));
-        // 25 bps displacement -> 20 bps uncompensated -> 50% of 20 = 10.
-        assertEq(AirbagMath.chargeBps(25, fee, 1000), uint256(10));
+        // 25 bps displacement -> 20 bps uncompensated, split at the rate switch:
+        // 5 bps at 70% + 15 bps at 50% = 3.5 + 7.5 = 11.
+        assertEq(AirbagMath.chargeBps(25, fee, 1000), uint256(11));
     }
 
     function test_charge_respectsTheCap() public pure {
@@ -82,10 +83,31 @@ contract AirbagMathTest is Test {
 
     /// @dev A maker run over further must never end up owed less; a discontinuity here would be
     ///      an arbitrage on the charge rule itself.
-    function testFuzz_charge_isMonotonicInDisplacement(uint256 a, uint256 b) public pure {
+    ///
+    ///      This originally fuzzed `chargeBps`, the ROUNDED view — where dividing by 10,000
+    ///      flattened the very jump it was meant to catch, so it passed while the money path was
+    ///      discontinuous. It now fuzzes the money path, and fuzzes the fee too, because the
+    ///      discontinuity's position depends on the threshold.
+    function testFuzz_charge_isMonotonicInDisplacement(uint256 a, uint256 b, uint256 fee) public pure {
         a = bound(a, 0, 5_000);
         b = bound(b, a, 5_000);
-        assertLe(AirbagMath.chargeBps(a, 5, 10_000), AirbagMath.chargeBps(b, 5, 10_000));
+        fee = bound(fee, 0, 100);
+        assertLe(
+            AirbagMath.chargeAmount(1e24, a, fee, 10_000),
+            AirbagMath.chargeAmount(1e24, b, fee, 10_000),
+            "being run over further must never pay less"
+        );
+    }
+
+    /// @dev The exact case the old test missed, pinned as an example so a refactor cannot
+    ///      reintroduce it quietly.
+    function test_charge_hasNoCliffAtTheRateSwitch() public pure {
+        uint256 prev;
+        for (uint256 d = 5; d <= 20; ++d) {
+            uint256 got = AirbagMath.chargeAmount(1e24, d, 5, 10_000);
+            assertGe(got, prev, "payout must not step backwards across the rate switch");
+            prev = got;
+        }
     }
 
     /// @dev The reason chargeAmount exists. Rounding to whole bps first would erase a double-digit
@@ -99,7 +121,8 @@ contract AirbagMathTest is Test {
         assertEq(AirbagMath.chargeAmount(notional, 6, fee, 1000), (notional * 7000) / 100_000_000);
 
         // 18 bps (the measured tail mean): 50% of 13 bps = 6.5 bps, not 6.
-        assertEq(AirbagMath.chargeAmount(notional, 18, fee, 1000), (notional * 65_000) / 100_000_000);
+        // 13 bps uncompensated: 5 at 70% + 8 at 50% = 3.5 + 4.0 = 7.5 bps.
+        assertEq(AirbagMath.chargeAmount(notional, 18, fee, 1000), (notional * 75_000) / 100_000_000);
         assertGt(
             AirbagMath.chargeAmount(notional, 18, fee, 1000),
             (notional * AirbagMath.chargeBps(18, fee, 1000)) / 10_000,
@@ -132,7 +155,7 @@ contract AirbagMathTest is Test {
     function test_charge_matchesTheMeasuredDistribution() public pure {
         uint256 fee = AirbagMath.feeToBps(500);
         assertEq(AirbagMath.chargeBps(2, fee, 1000), uint256(0), "median fill: airbag stays out of the way");
-        assertEq(AirbagMath.chargeBps(18, fee, 1000), uint256(6), "tail mean: ~6 bps back to the maker");
-        assertEq(AirbagMath.chargeBps(24, fee, 1000), uint256(9), "deep tail: ~9 bps back to the maker");
+        assertEq(AirbagMath.chargeBps(18, fee, 1000), uint256(7), "tail mean: ~7 bps back to the maker");
+        assertEq(AirbagMath.chargeBps(24, fee, 1000), uint256(10), "deep tail: ~10 bps back to the maker");
     }
 }

@@ -10,6 +10,7 @@ import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {TickBitmap} from "@uniswap/v4-core/src/libraries/TickBitmap.sol";
+import {LPFeeLibrary} from "@uniswap/v4-core/src/libraries/LPFeeLibrary.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {SqrtPriceMath} from "@uniswap/v4-core/src/libraries/SqrtPriceMath.sol";
 import {AirbagMath} from "./AirbagMath.sol";
@@ -48,6 +49,9 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     error PoolHasNoLiquidity();
     error OrderTooSmallForPool();
     error TickTooCrowded();
+    error WrongPool();
+    error NativeCurrencyUnsupported();
+    error DynamicFeeUnsupported();
 
     struct Order {
         PoolId poolId;
@@ -187,6 +191,23 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     {
         if (liquidity == 0) revert ZeroLiquidity();
         if (tickLower % key.tickSpacing != 0) revert TickNotAligned();
+
+        // An order in a pool this hook is not attached to would never receive a callback: it
+        // could never fill and never be compensated, while the NFT and any interface would show
+        // it as live and protected. The principal is always recoverable by cancelling, so this
+        // is not a theft — but silently accepting an order that cannot work is its own defect.
+        if (address(key.hooks) != address(this)) revert WrongPool();
+
+        // Settlement moves tokens with transferFrom/transfer, which native currency does not
+        // answer to, and the hook has no receive(). Rather than half-support it, refuse at the
+        // door: the failure would otherwise surface deep inside somebody's swap.
+        if (Currency.unwrap(key.currency0) == address(0)) revert NativeCurrencyUnsupported();
+
+        // A dynamic-fee pool has no fixed fee to reason against, and the whole threshold argument
+        // is "the maker already earned the pool's fee on their own fill". With nothing to read,
+        // the charge would silently compute as zero — the worst kind of wrong, because it looks
+        // like the hook is working.
+        if (LPFeeLibrary.isDynamicFee(key.fee)) revert DynamicFeeUnsupported();
 
         (, int24 currentTick,,) = _manager.getSlot0(key.toId());
         int24 tickUpper = tickLower + key.tickSpacing;

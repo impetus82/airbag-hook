@@ -138,8 +138,18 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
     ///      cold SSTORE on every swap would be pure waste.
     ///      Literal because inline assembly cannot reference a keccak256 constant.
     ///      Derivation: keccak256("airbag.preTick") — asserted in AirbagHook.t.sol.
+    ///
+    ///      Mixed with the pool id rather than used bare. Today a single slot would be safe,
+    ///      because v4 makes no external call between beforeSwap and afterSwap of one swap, so
+    ///      two pools cannot interleave their snapshots. That is a property of the current
+    ///      framework rather than of this contract, and the hook is immutable — cheap insurance
+    ///      against the day it stops holding.
     uint256 private constant PRE_TICK_SLOT =
         0xf39f4f275c965d88ccd39db7efb952551c40121db7dd5c014405e56626e0561b;
+
+    function _preTickSlot(PoolId id) private pure returns (uint256) {
+        return PRE_TICK_SLOT ^ uint256(PoolId.unwrap(id));
+    }
 
     /// @dev Hard ceiling on what a single fill can be charged, in bps of that order's notional.
     ///      Not a tuning knob: without it a pathological tick span would let the charge approach
@@ -181,8 +191,9 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
         returns (bytes4, BeforeSwapDelta, uint24)
     {
         (, int24 tick,,) = poolManager.getSlot0(key.toId());
+        uint256 slot = _preTickSlot(key.toId());
         assembly ("memory-safe") {
-            tstore(PRE_TICK_SLOT, tick)
+            tstore(slot, tick)
         }
         emit PreTickObserved(key.toId(), tick);
         return (IHooks.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
@@ -203,10 +214,11 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
         returns (bytes4, int128)
     {
         int24 preTick;
+        uint256 slot = _preTickSlot(key.toId());
         assembly ("memory-safe") {
-            preTick := tload(PRE_TICK_SLOT)
+            preTick := tload(slot)
         }
-        (, int24 postTick,,) = poolManager.getSlot0(key.toId());
+        (, int24 postTick,, uint24 lpFee) = poolManager.getSlot0(key.toId());
         emit SwapObserved(key.toId(), preTick, postTick);
 
         // The returned delta lands on the swap's *unspecified* currency: the output for an
@@ -220,7 +232,7 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
                 key: key,
                 fillBudget: MAX_FILLS_PER_SWAP,
                 spacing: key.tickSpacing,
-                thresholdBps: AirbagMath.feeToBps(key.fee),
+                thresholdBps: AirbagMath.feeToBps(lpFee), // slot0 is authoritative, not the key
                 capBps: CAP_BPS,
                 chargeInCurrency0: chargeInCurrency0
             }),

@@ -54,9 +54,7 @@ library AirbagMath {
     {
         if (displacement <= thresholdBps) return 0;
         unchecked {
-            uint256 excess = displacement - thresholdBps;
-            uint256 rho = displacement <= RHO_SWITCH_BPS ? RHO_NEAR : RHO_FAR;
-            uint256 scaled = excess * rho; // bps x 1e4, kept unrounded
+            uint256 scaled = _scaledShare(displacement - thresholdBps, thresholdBps);
             uint256 capScaled = capBps * 10_000;
             if (scaled > capScaled) scaled = capScaled;
             return (notional * scaled) / 100_000_000; // 1e4 (bps) x 1e4 (rho)
@@ -81,10 +79,22 @@ library AirbagMath {
     {
         if (displacement <= thresholdBps) return 0; // already made whole by the fee
         unchecked {
-            uint256 excess = displacement - thresholdBps;
-            uint256 rho = displacement <= RHO_SWITCH_BPS ? RHO_NEAR : RHO_FAR;
-            uint256 charge = (excess * rho) / 10_000;
+            uint256 charge = _scaledShare(displacement - thresholdBps, thresholdBps) / 10_000;
             return charge > capBps ? capBps : charge;
+        }
+    }
+
+    /// @dev The share applied to the excess, scaled by 1e4, computed MARGINALLY.
+    ///      Switching the rate on the whole excess made the payout jump backwards: at a 5 bp
+    ///      threshold, 11 bps of displacement paid 14% LESS than 10 bps did, so a maker run over
+    ///      further took home less. Applying the near rate only to the excess that actually falls
+    ///      inside the near band — the way a tax bracket works — makes the result monotone by
+    ///      construction rather than by luck.
+    function _scaledShare(uint256 excess, uint256 thresholdBps) private pure returns (uint256) {
+        unchecked {
+            uint256 nearBand = RHO_SWITCH_BPS > thresholdBps ? RHO_SWITCH_BPS - thresholdBps : 0;
+            uint256 near = excess < nearBand ? excess : nearBand;
+            return near * RHO_NEAR + (excess - near) * RHO_FAR;
         }
     }
 
