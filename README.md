@@ -49,11 +49,22 @@ A hackathon deployment on dust-seeded pools — read the known limits first.
 
 ## It works on mainnet, to the basis point
 
-A full cycle on Base — [place](https://basescan.org/tx/0x7fce3af9d3a92001ec85a613c6a865fe231a388c4f04631be8264230206f539b),
+A full cycle on **Base** — [place](https://basescan.org/tx/0x7fce3af9d3a92001ec85a613c6a865fe231a388c4f04631be8264230206f539b),
 [cross](https://basescan.org/tx/0x46a3f13febfad4ed45d4248afed118703329da9018b636060aff3f39de547af7),
-[claim](https://basescan.org/tx/0x728e0aff7d4b77558b670cba2fd0351031d9582044b0f2b6c80045dab9419534).
-The hook measured 70 bps of displacement past the maker, and the charge rule says 33.50 bps of
-their notional is owed. It paid 33.50 bps. See [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md).
+[claim](https://basescan.org/tx/0x728e0aff7d4b77558b670cba2fd0351031d9582044b0f2b6c80045dab9419534) —
+and its mirror image on **Unichain**, where the pair sorts the other way round, so the order rests
+below the market and sells into a falling tick:
+[place](https://uniscan.xyz/tx/0xdb369a2e59b935792025ea3c7df95df9856a1477aa2264fbf616cc23a84b60d6),
+[cross](https://uniscan.xyz/tx/0xd00b743f1e5de166c22c9662e32abb1cae73df84b04d083915599aba41f28174),
+[claim](https://uniscan.xyz/tx/0x9d5c36f3b0bdd647c6e96dc234bcebe082ad64e24cd49b2f58c2ab28e833e006).
+
+Both measured 70 bps of displacement past the maker. The rule says 33.50 bps of the maker's
+notional is owed. Both paid **33.50 bps** — 1,823,077 wei on Base, 1,826,727 wei on Unichain.
+Opposite currency ordering, opposite swap direction, same number.
+
+What that demonstration does *not* show — the pools are dust, the crossing swaps were mine, and
+past the seeded band the displacement was free to create — is written out in
+[docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md).
 
 ## Try it
 

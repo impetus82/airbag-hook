@@ -891,3 +891,64 @@ pool does not attract arbitrage. That is a fact about demonstration pools rather
 hook, and it goes in the video that way rather than being quietly omitted.
 
 ---
+
+## Day 22 — 25 Aug
+
+**Goal: the same proof on Unichain — and it turned into a correction of Day 21.**
+
+The cycle ran: order #1 at tick 199810, a swap pushed the tick down through it to 199740, claimed.
+70 bps of displacement, 1,826,727 wei of WETH credited against a notional of 545,291,795 — **33.50
+bps**, the same figure Base produced, on a chain where the pair sorts the other way round and the
+price moves the other direction. The rule does not care which way the axis points.
+
+Afterwards the hook held zero of both currencies. Everything it charged the swap it had paid to
+the maker, nothing stranded. That is the insolvency critical from audit round two, verified on a
+live chain instead of in a test.
+
+### The bug I caught before running it, not after
+
+The script placed orders a fixed number of spacings **above** the tick. An order above the tick is
+funded entirely in currency0 — and currency0 is WETH on Base but USDC on Unichain. The same offset
+that buys 5.4e8 wei of WETH buys **one raw unit** of USDC, and 33.50 bps of one unit truncates to
+zero.
+
+Every transaction would have succeeded. The claim would have printed a rebate of nothing, and I
+would have spent the evening looking for a bug in the charge path that was never there. The offset
+is signed now. Worth naming the general shape: a parameter that is correct on the chain you wrote
+it for and silently wrong on the next one, with no error to tell you.
+
+### Day 21 was wrong about why arbitrage stopped
+
+Yesterday I wrote that arbitrage walked the Base price partway and stopped because thirty cents of
+mispricing is worth less than the gas. It sounded right, and it is true, and it is not the binding
+reason.
+
+`SeedPool` spans ±120 spacings around the price **at seeding time**. Base was seeded at tick
+−201000, so its liquidity ends at −199800. Arbitrage stopped at −199800. Unichain was seeded at
++201000, its liquidity ends at 199800, and arbitrage stopped at 199837 — thirty-seven ticks short
+of the same edge. Two chains, two different directions, both halting at the boundary of the band.
+That is not a gas argument, that is a wall. Past the edge there is nothing to trade against and no
+gas price makes a trade possible.
+
+I only saw it because the Unichain swap cost 4,325 units of USDC where I had predicted 11,100. A
+2.6× miss on a number I had derived myself was too large to wave through, and the piecewise
+reconstruction — real liquidity down to 199800, zero below it — matched the chain to within 1.9%.
+
+**The consequence is a caveat, and it goes in the docs rather than staying in my head.** The order
+sat at the edge of the band, so most of the displacement the swap travelled past the fill edge
+crossed empty ticks: all 70 bps of it on Base, 60 of 70 on Unichain. The hook measured and charged
+exactly what the rule specifies — that part is genuinely proven. What these pools cannot show is
+the premise underneath the rule: that the displacement was profitable to create, and therefore
+worth charging for. That needs depth, and dust has none. Two sentences in the demo video, not
+omitted.
+
+### A small trap worth recording
+
+`broadcast/*/run-latest.json` lists transactions and hashes in an order that does not correspond to
+the calls. Mapping them by array position put `createOrder`'s hash on an `approve`. I only noticed
+because a "swap" was reported as costing 55,785 gas. Every hash that goes in a public document is
+now resolved against the chain — `cast tx` for the `to` address and the selector — rather than read
+out of the broadcast file. The three Base hashes already published turned out to be correct, but
+that was luck, not method.
+
+---

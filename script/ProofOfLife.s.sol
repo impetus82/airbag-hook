@@ -18,12 +18,14 @@ import {AirbagOrders} from "../src/AirbagOrders.sol";
 import {AirbagConfig} from "./AirbagConfig.sol";
 
 /// @notice Place a resting order in the path of live flow.
-/// @dev The pool was initialised below the wider market, so arbitrage is pushing the price up.
-///      An order to sell the rising asset therefore sits directly in that path and can be filled
-///      by whoever is already doing the arbitrage — which is a better demonstration than crossing
-///      it myself, because nothing about it is staged.
+/// @dev Both pools were initialised below the wider market, so arbitrage is pushing each one
+///      towards it — up the tick axis on Base, down it on Unichain, because the pairs sort the
+///      other way round there. An order to sell the appreciating asset therefore sits directly in
+///      that path and can be filled by whoever is already doing the arbitrage, which is a better
+///      demonstration than crossing it myself, because nothing about it is staged.
 ///
 ///      HOOK=0x… forge script script/ProofOfLife.s.sol --tc PlaceOrder --rpc-url base --broadcast
+///      OFFSET_SPACINGS=-2 for Unichain — see the note on `offset` below.
 contract PlaceOrder is Script {
     using StateLibrary for IPoolManager;
 
@@ -36,9 +38,16 @@ contract PlaceOrder is Script {
         (, int24 tick,,) = d.poolManager.getSlot0(key.toId());
         uint128 poolLiq = d.poolManager.getLiquidity(key.toId());
 
-        // A couple of spacings above the market: close enough that live flow reaches it soon,
+        // A couple of spacings away from the market: close enough that live flow reaches it soon,
         // far enough that it is not already crossed when the transaction lands.
-        int24 offset = int24(int256(vm.envOr("OFFSET_SPACINGS", uint256(2))));
+        //
+        // Signed, and it has to be. The two pools sort their currencies opposite ways — currency0
+        // is WETH on Base and USDC on Unichain — and an order placed ABOVE the tick is funded
+        // entirely in currency0. So the offset that buys 5.4e8 wei of WETH on Base buys ONE raw
+        // unit of USDC on Unichain, a notional small enough that a 33 bps rebate truncates to
+        // zero and the demonstration shows nothing at all. Placing below the tick on Unichain
+        // funds the order in WETH instead, and the two chains produce comparable numbers.
+        int24 offset = int24(vm.envOr("OFFSET_SPACINGS", int256(2)));
         int24 target = ((tick / d.tickSpacing) + offset) * d.tickSpacing;
         uint128 size = uint128(vm.envOr("ORDER_LIQUIDITY", uint256(poolLiq) / 1000));
 
@@ -49,7 +58,7 @@ contract PlaceOrder is Script {
         console2.log("bounds       ", uint256(poolLiq) / 10000, uint256(poolLiq) / 100);
 
         vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
-        // Above the market means funded with whichever token is currency0 here.
+        // Which side of the tick decides which currency funds it, so approve both.
         IERC20(Currency.unwrap(key.currency0)).approve(hookAddr, type(uint256).max);
         IERC20(Currency.unwrap(key.currency1)).approve(hookAddr, type(uint256).max);
         uint256 id = hook.createOrder(key, target, size);
@@ -60,11 +69,17 @@ contract PlaceOrder is Script {
 }
 
 /// @notice Cross the order deliberately.
-/// @dev The intent was for live arbitrage to do this — the pool was initialised below the wider
-///      market, so flow should have walked the price up through the order. It moved partway and
-///      stopped, which turns out to be the honest answer: this pool holds about thirty cents, so
-///      the remaining mispricing is worth less than the gas to capture it. A dust pool does not
-///      attract arbitrage, which is a fact about demonstration pools rather than about the hook.
+/// @dev The intent was for live arbitrage to do this — each pool was initialised away from the
+///      wider market, so flow should have walked the price through the order on its way back. It
+///      moved partway and stopped, and the reason is structural rather than economic: SeedPool
+///      spans ±120 spacings around the price AT SEEDING TIME, so the liquidity ends at a hard
+///      edge — −199800 on Base, 199800 on Unichain — and that edge is exactly where arbitrage
+///      stopped on both chains. Past it there is nothing to trade against, so no further
+///      arbitrage is possible at any gas price.
+///
+///      Which means the displacement this swap creates beyond the band is free to produce. The
+///      measurement and the charge are still exactly right; what a pool this shallow cannot show
+///      is that displacement was worth creating in the first place. That needs real depth.
 contract TriggerSwap is Script {
     using StateLibrary for IPoolManager;
 

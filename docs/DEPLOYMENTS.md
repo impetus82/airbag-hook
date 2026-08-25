@@ -70,13 +70,66 @@ the pool's 5 bps fee, so 65 bps were uncompensated, charged marginally: 5 bps at
 at 50% = **33.50 bps**. It credited 1,823,077 wei of WETH against an order notional of 544,202,355
 wei — **33.50 bps**. Not approximately.
 
-Two honest notes. The amounts are dust because the pool is: the order was worth a fraction of a
-cent, and the rebate proportionally less. And the crossing swap was mine. The intent was for live
-arbitrage to do it — the pool was initialised below the wider market precisely so that flow would
-walk the price up through the order — and it moved partway before stopping, which turns out to be
-the correct answer: with about thirty cents in the pool, the remaining mispricing is worth less
-than the gas to capture it. A dust pool does not attract arbitrage. That is a fact about
-demonstration pools, not about the hook.
+Three honest notes, and the third one corrects the second.
+
+The amounts are dust because the pool is: the order was worth a fraction of a cent, and the
+rebate proportionally less.
+
+The crossing swap was mine. The intent was for live arbitrage to do it — the pool was initialised
+below the wider market precisely so that flow would walk the price up through the order — and it
+moved partway before stopping.
+
+I first wrote that stop down as a gas argument: with thirty cents in the pool, the remaining
+mispricing is worth less than the fee to capture it. That is true and it is **not the binding
+reason**, which I only found when the same thing happened on Unichain. The seed spans ±120 tick
+spacings around the price *at seeding time*, so Base's liquidity ends at exactly −199800 — and
+−199800 is exactly where arbitrage stopped. Past the edge of the band there is nothing to trade
+against, so no further arbitrage is possible at any gas price.
+
+That has a consequence worth stating plainly. The order rested above the band, so the 70 bps the
+swap travelled past the fill edge crossed **empty ticks** and cost the swapper nothing to create.
+The hook measured and charged exactly what the rule says, to the wei — that part is real. What a
+pool this shallow cannot demonstrate is the premise underneath the rule: that displacement is
+profitable to create, and therefore worth charging for. That needs depth, and dust has none.
+
+## Proof of life — Unichain, 25 August
+
+The same cycle on the other chain, and deliberately its mirror image. The pair sorts the other way
+round here, so the order rests **below** the market and sells into a falling tick rather than a
+rising one.
+
+| | |
+|---|---|
+| place order #1 (tick 199810) | [`0xdb369a2e…4b60d6`](https://uniscan.xyz/tx/0xdb369a2e59b935792025ea3c7df95df9856a1477aa2264fbf616cc23a84b60d6) |
+| swap through it, on to 199740 | [`0xd00b743f…f28174`](https://uniscan.xyz/tx/0xd00b743f1e5de166c22c9662e32abb1cae73df84b04d083915599aba41f28174) |
+| claim | [`0x9d5c36f3…33e006`](https://uniscan.xyz/tx/0x9d5c36f3b0bdd647c6e96dc234bcebe082ad64e24cd49b2f58c2ab28e833e006) |
+
+| | Base | Unichain |
+|---|---|---|
+| order funded in | WETH, as currency0 | WETH, as currency1 |
+| notional | 544,202,355 wei | 545,291,795 wei |
+| tick travels | up | down |
+| displacement | 70 bps | 70 bps |
+| rebate | 1,823,077 wei | 1,826,727 wei |
+| **rebate / notional** | **33.50 bps** | **33.50 bps** |
+
+Two chains, opposite currency ordering, opposite swap direction — and the rule lands on the same
+number to four significant figures.
+
+**The orientation nearly produced a silent failure.** The script placed orders a fixed offset
+*above* the tick, and an order above the tick is funded entirely in currency0. On Base that is
+WETH and buys 5.4e8 wei. On Unichain currency0 is USDC, and the same offset buys **one raw unit** —
+a notional against which a 33.50 bps rebate truncates to zero. Every transaction would have
+succeeded and the demonstration would have reported a rebate of nothing. The offset is signed now,
+and the reason is written above it in the script.
+
+After the claim the hook holds **zero of both currencies**. Everything it charged the swap it paid
+to the maker, with nothing stranded — the exact property the second audit's insolvency critical was
+about, confirmed on a live chain rather than in a test.
+
+Of the 70 bps here, the first 10 consumed real liquidity before the price left the seeded band;
+the remaining 60 crossed empty ticks. The same caveat as Base, and the reason it is stated twice
+is that it is the honest limit of what these pools can show.
 
 ## This is a hackathon deployment
 
