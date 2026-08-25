@@ -45,6 +45,8 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     error OrderAlreadyFilled();
     error PoolKeyMismatch();
     error OrderNotFilled();
+    error OrderNotFound();
+    error OrderNotCrossed();
     error OrderTooLargeForPool();
     error PoolHasNoLiquidity();
     error OrderTooSmallForPool();
@@ -72,7 +74,8 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
 
     enum Action {
         Add,
-        Remove
+        Remove,
+        Settle
     }
 
     /// @dev An order may be at most this share of the pool's active liquidity, in hundredths of
@@ -113,7 +116,8 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     ///      a fill removes a position and takes tokens, so its cost is real; without a cap, a
     ///      single tick crowded with orders makes crossing that price level cost unbounded gas
     ///      and eventually revert every swap that tries — a price level anyone could wall off.
-    ///      Truncation must only ever DEFER a fill, never cancel it: see settleFills.
+    ///      Truncation currently DROPS the remainder rather than deferring it; settleFills below
+    ///      is the recovery path.
     uint256 internal constant MAX_FILLS_PER_SWAP = 24;
 
     /// @dev Orders must be at least this fraction of the pool's active liquidity (1/10000 = 1bp
@@ -323,13 +327,55 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         emit OrderClaimed(orderId, msg.sender, o.rebate0, o.rebate1);
     }
 
+    /// @notice Materialise an order the market has already crossed but which no swap settled.
+    /// @dev Permissionless, because the person who needs it most may not be the one who notices.
+    ///      A swap settles at most `MAX_FILLS_PER_SWAP` orders; beyond that the remainder is left
+    ///      behind, and without a way back it would sit as live liquidity that the market can
+    ///      convert straight back — the un-fill this design exists to prevent.
+    ///
+    ///      Being crossed is a pure function of the current tick against the order's own range,
+    ///      so no oracle and no trust in the caller are involved.
+    ///
+    ///      HONEST LIMIT: this rescues the maker's PRINCIPAL, not their compensation. There is no
+    ///      swap here to charge, and inventing a payer would be worse than admitting the gap — so
+    ///      an order settled this way is filled at its limit price with no displacement rebate.
+    ///      Truncation therefore costs a maker their airbag, never their money.
+    function settleFills(uint256 orderId, PoolKey calldata key) external {
+        Order memory o = orders[orderId];
+        if (o.liquidity == 0) revert OrderNotFound();
+        if (o.filled) revert OrderAlreadyFilled();
+        if (PoolId.unwrap(key.toId()) != PoolId.unwrap(o.poolId)) revert PoolKeyMismatch();
+
+        (, int24 tick,,) = _manager.getSlot0(o.poolId);
+        bool crossed = o.zeroForOne ? (tick >= o.tickLower + o.tickSpacing) : (tick < o.tickLower);
+        if (!crossed) revert OrderNotCrossed();
+
+        orders[orderId].filled = true;
+        orders[orderId].filledBlock = uint64(block.number);
+        _tickLiquidity[o.poolId][o.tickLower] -= o.liquidity;
+        _unlist(o.poolId, o.tickLower, o.tickSpacing, o.tickIndex);
+        emit OrderFilled(orderId, o.poolId, o.tickLower, tick);
+
+        _manager.unlock(
+            abi.encode(
+                Callback({
+                    action: Action.Settle,
+                    key: key,
+                    maker: address(this),
+                    tickLower: o.tickLower,
+                    liquidity: o.liquidity,
+                    orderId: orderId
+                })
+            )
+        );
+    }
+
     function unlockCallback(bytes calldata raw) external returns (bytes memory) {
         if (msg.sender != address(_manager)) revert NotPoolManager();
         Callback memory cb = abi.decode(raw, (Callback));
 
-        int256 liquidityDelta = cb.action == Action.Add
-            ? int256(uint256(cb.liquidity))
-            : -int256(uint256(cb.liquidity));
+        int256 liquidityDelta =
+            cb.action == Action.Add ? int256(uint256(cb.liquidity)) : -int256(uint256(cb.liquidity));
 
         (BalanceDelta delta,) = _manager.modifyLiquidity(
             cb.key,
@@ -342,6 +388,22 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             ""
         );
 
+        if (cb.action == Action.Settle) {
+            // Proceeds belong to the order's owner, not to whoever kindly called settleFills.
+            Order storage o = orders[cb.orderId];
+            int128 s0 = delta.amount0();
+            int128 s1 = delta.amount1();
+            if (s0 > 0) {
+                _manager.take(cb.key.currency0, address(this), uint128(s0));
+                o.owed0 = uint128(s0);
+            }
+            if (s1 > 0) {
+                _manager.take(cb.key.currency1, address(this), uint128(s1));
+                o.owed1 = uint128(s1);
+            }
+            return "";
+        }
+
         _settleOrTake(cb.key.currency0, cb.maker, delta.amount0());
         _settleOrTake(cb.key.currency1, cb.maker, delta.amount1());
         return "";
@@ -352,6 +414,12 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     ///      being compensated is the one outcome this hook exists to prevent.
     struct ChargeCtx {
         PoolKey key;
+        /// @dev What this swap can actually be asked for, decremented as it is spent. Carried IN
+        ///      rather than clamped afterwards: crediting a maker and then discovering the swap
+        ///      could not cover it leaves an unbacked promise, and the maker finds out only when
+        ///      their claim reverts. Charging against a budget makes "credited equals collected"
+        ///      true by construction instead of by hope.
+        uint256 payBudget;
         uint256 fillBudget; // orders left to settle in this swap; mutated as the walk proceeds
         int24 spacing;
         uint256 thresholdBps; // the pool's own fee
@@ -395,7 +463,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             }
 
             if (initialized) total += _fillBucket(poolId, ctx, next, postTick);
-            if (ctx.fillBudget == 0) return total;
+            if (ctx.fillBudget == 0 || ctx.payBudget == 0) return total;
             cursor = rising ? next : next - spacing;
         }
         emit FillScanTruncated(poolId, cursor);
@@ -419,7 +487,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             if (!crossed) continue;
             if (ctx.fillBudget == 0) {
                 emit FillsDeferred(poolId, tick);
-                return subtotal; // deferred, not lost — settleFills picks these up
+                return subtotal; // recoverable via settleFills
             }
             ctx.fillBudget--;
 
@@ -503,13 +571,21 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         // original charge without double counting.
         uint256 owedNow = AirbagMath.chargeAmount(notional, displacement, ctx.thresholdBps, ctx.capBps);
         uint256 owedBefore = AirbagMath.chargeAmount(notional, base, ctx.thresholdBps, ctx.capBps);
-        o.paidDisplacement = displacement > type(uint16).max ? type(uint16).max : uint16(displacement);
         if (owedNow <= owedBefore) return 0;
-        amount = owedNow - owedBefore;
+        uint256 full = owedNow - owedBefore;
+        amount = full > ctx.payBudget ? ctx.payBudget : full;
+        if (amount == 0) return 0;
+        ctx.payBudget -= amount;
+
+        // Advance the paid-for mark only as far as was actually paid for. Interpolating on the
+        // excess is exact inside a rate band and conservative across one, and it leaves the
+        // remainder genuinely collectable by a later swap rather than silently forgiven.
+        uint256 reached = amount == full ? displacement : base + ((displacement - base) * amount) / full;
+        o.paidDisplacement = reached > type(uint16).max ? type(uint16).max : uint16(reached);
 
         if (ctx.chargeInCurrency0) o.rebate0 += uint128(amount);
         else o.rebate1 += uint128(amount);
-        emit RebateCredited(id, ctx.chargeInCurrency0, amount, displacement);
+        emit RebateCredited(id, ctx.chargeInCurrency0, amount, reached);
     }
 
     /// @notice Charge for any further displacement added to makers already filled this block.

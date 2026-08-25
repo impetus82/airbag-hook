@@ -226,10 +226,23 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
         bool exactInput = params.amountSpecified < 0;
         bool chargeInCurrency0 = (exactInput != params.zeroForOne);
 
+        // What this swap can be asked for, established BEFORE anything is credited.
+        //
+        // The unspecified currency is the swap's OUTPUT when the input was exact, and its INPUT
+        // when the output was exact. Bounding by `received > 0` was therefore right for one case
+        // and catastrophic for the other: on every exact-output swap the input delta is negative,
+        // so the bound evaluated to zero and the hook collected nothing at all. Each branch now
+        // gets the quantity that actually belongs to it.
+        int128 unspecified = chargeInCurrency0 ? swapDelta.amount0() : swapDelta.amount1();
+        uint256 payBudget = exactInput
+            ? (unspecified > 0 ? uint256(uint128(unspecified)) : 0)
+            : (unspecified < 0 ? uint256(uint128(-unspecified)) : 0);
+
         uint256 charge = _markFills(
             key.toId(),
             ChargeCtx({
                 key: key,
+                payBudget: payBudget,
                 fillBudget: MAX_FILLS_PER_SWAP,
                 spacing: key.tickSpacing,
                 thresholdBps: AirbagMath.feeToBps(lpFee), // slot0 is authoritative, not the key
@@ -240,17 +253,8 @@ contract AirbagHook is AirbagHookBase, AirbagOrders {
             postTick
         );
 
-        if (charge == 0) return (IHooks.afterSwap.selector, int128(0));
-
-        // Never ask a swap for more than it actually received. A top-up is sized from the
-        // ORDER's notional, which has no relation to the size of whichever swap happens to move
-        // the price next — so a small trade could be handed a delta several times its own output
-        // and simply revert. Under-collecting is strictly better than destroying someone's trade;
-        // the shortfall is not written off either, because paidDisplacement is only advanced by
-        // what was actually charged, so a later swap picks the rest up.
-        int128 received = chargeInCurrency0 ? swapDelta.amount0() : swapDelta.amount1();
-        uint256 payable_ = received > 0 ? uint256(uint128(received)) : 0;
-        if (charge > payable_) charge = payable_;
+        // No post-hoc clamp: the budget was spent inside the walk, so what was credited to
+        // makers and what is taken here are the same number by construction.
         if (charge == 0) return (IHooks.afterSwap.selector, int128(0));
 
         // Take first, then return the matching delta: the take leaves the hook owing the pool,

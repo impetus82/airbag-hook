@@ -149,6 +149,55 @@ contract AirbagChargeTest is Test, Deployers {
         assertEq(IERC20(Currency.unwrap(currency0)).balanceOf(address(hook)), 0, "hook took nothing");
     }
 
+    /// @dev Exact-OUTPUT swaps. Every swap in this suite specified its input, so an entire half
+    ///      of the charge path went untested — and that is precisely the half that was broken:
+    ///      the unspecified currency is the swap's INPUT when the output is exact, and a bound
+    ///      written for the output case evaluated to zero, so exact-output swaps crossed makers
+    ///      and paid them nothing at all.
+    function test_exactOutputSwapAlsoPaysTheMaker() public {
+        uint256 id = _place(1, 1e18);
+
+        // Positive amountSpecified: the swapper names the output they want. Sized generously so
+        // the market clears the maker's range comfortably; the point under test is the charge
+        // path, not the sizing.
+        swapRouter.swap(
+            key,
+            SwapParams({
+                zeroForOne: false,
+                amountSpecified: 5e18,
+                sqrtPriceLimitX96: TickMath.getSqrtPriceAtTick(2000)
+            }),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            ""
+        );
+
+        assertTrue(hook.orderOf(id).filled, "exact-output swap fills the order");
+        (uint256 r0, uint256 r1) = _rebates(id);
+        assertGt(r0 + r1, 0, "and must compensate the maker just as an exact-input swap does");
+    }
+
+    /// @dev Whatever is credited has to be sitting in the contract. Crediting first and
+    ///      discovering the swap could not cover it leaves an unbacked promise that surfaces only
+    ///      when the maker's claim reverts.
+    function test_everyCreditIsBackedByTokensHeld() public {
+        uint256 a = _place(1, 1e18);
+        uint256 b = _place(2, 1e18);
+        _pushTo(120);
+
+        AirbagOrders.Order memory oa = hook.orderOf(a);
+        AirbagOrders.Order memory ob = hook.orderOf(b);
+        uint256 owed0 = uint256(oa.owed0) + oa.rebate0 + ob.owed0 + ob.rebate0;
+        uint256 owed1 = uint256(oa.owed1) + oa.rebate1 + ob.owed1 + ob.rebate1;
+
+        assertGe(IERC20(Currency.unwrap(currency0)).balanceOf(address(hook)), owed0, "currency0 backed");
+        assertGe(IERC20(Currency.unwrap(currency1)).balanceOf(address(hook)), owed1, "currency1 backed");
+
+        vm.prank(maker);
+        hook.claimOrder(a, key); // must not revert
+        vm.prank(maker);
+        hook.claimOrder(b, key);
+    }
+
     /// @dev Self-fill must be a losing trade, or the mechanism is a faucet. The rebate is a
     ///      fraction of the overshoot on one order; running yourself over means paying the pool
     ///      fee on the whole swap, which is necessarily the larger number — before gas.

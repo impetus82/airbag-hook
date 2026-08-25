@@ -654,3 +654,62 @@ because v4 makes no external call between `beforeSwap` and `afterSwap` — a pro
 framework, not of this contract, and the hook is immutable.
 
 ---
+
+## Day 16 — 23 Aug (same session)
+
+**Goal: repair the repairs. The second audit found the first round's fix had opened a bigger
+hole than it closed.**
+
+### What the re-audit found
+
+Two criticals, both introduced by my own fix for the previous round's blocker 7 — and unlike the
+first audit, this time maker principal was genuinely at risk.
+
+**Exact-output swaps paid nothing at all.** The clamp bounded the charge by `received > 0`. The
+unspecified currency is the swap's *output* when the input is exact, but its *input* when the
+output is exact — where the delta is always negative. So the bound evaluated to zero on 100% of
+exact-output swaps, in both directions. Measured: the same 40 bp crossing collected 924,260,342,130
+via exact input and exactly 0 via exact output. Not one swap in the suite used a positive
+`amountSpecified`, so half the charge surface had never been executed.
+
+**Credit was booked before the clamp, leaving the hook insolvent.** Makers were credited the full
+amount while only the clamped part was collected, and `claimOrder` pays from a single shared
+balance holding every other maker's banked principal. Reproduced: one maker owed
+501,526,057,929,151 against 500,600,410,225,614 held — claim reverts, `cancelOrder` also reverts
+because the order is filled, and there is no rescue function. Principal locked permanently. Worse
+across pools: a second pool on the same tokens could be drained of an honest pool's funds.
+
+### Fixed
+
+**The payment budget is now carried into the walk instead of clamping afterwards.** Each charge
+is taken against what remains of what this swap can actually pay; credited and collected are the
+same number by construction rather than by hope. Where the budget binds, the paid-for mark
+advances only as far as was actually paid — interpolated on the excess, exact within a rate band
+and conservative across one — so the remainder is genuinely collectable later rather than
+silently forgiven.
+
+**Each branch of the budget now gets the quantity that belongs to it**, so exact-output swaps pay
+like any other.
+
+**`settleFills` exists.** I had referenced it in two comments as the recovery path for orders
+skipped by the fill budget, and never written it — a guarantee that was false in a public
+repository. It is now a real permissionless function: being crossed is a pure function of the
+current tick against the order's own range, so no oracle and no trust in the caller are involved.
+Its honest limit is documented in the code: it rescues the maker's principal, not their
+compensation, because there is no swap present to charge and inventing a payer would be worse
+than admitting the gap.
+
+### Challenges
+
+22. **The invariant was toothless, and that is why none of this was caught.** It summed only the
+    rebates and ignored `owed0/owed1` — the banked principal, orders of magnitude larger, sitting
+    in the same balance — so it passed on a contract that could not pay its makers. And the
+    handler hard-coded a negative `amountSpecified`, so the fuzzer never once produced an
+    exact-output swap. Sharpened both ways, it fails on the old code immediately and passes on the
+    new. Fixing the detector before the defect was the right order; I should have done it first
+    rather than second.
+
+23. **Review tooling left scaffolding in the tree again**, this time whole directories. Removed,
+    and `.gitignore` now covers the pattern so it cannot reach a commit a third time.
+
+---

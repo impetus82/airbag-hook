@@ -78,6 +78,44 @@ contract AirbagHandler is Test {
         } catch {}
     }
 
+    /// @dev Exact-OUTPUT leg. The original handler hard-coded a negative amountSpecified, so the
+    ///      fuzzer never once exercised the exact-output branch — which is exactly where the
+    ///      charge path turned out to be broken. Half the surface was formally untested while the
+    ///      suite reported full health.
+    function moveMarketExactOutput(int16 targetOffset, bool zeroForOne) public {
+        (, int24 cur,,) = StateLibrary.getSlot0(manager, key.toId());
+        int24 target = cur + (int24(targetOffset) % 400);
+        if (target == cur) return;
+        if (target > TickMath.MAX_TICK - 10 || target < TickMath.MIN_TICK + 10) return;
+        try router.swap(
+            key,
+            SwapParams({
+                zeroForOne: zeroForOne,
+                amountSpecified: 1e18, // positive: exact output
+                sqrtPriceLimitX96: TickMath.getSqrtPriceAtTick(target)
+            }),
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
+            ""
+        ) {} catch {}
+    }
+
+    /// @dev Pile orders onto a single tick, so the fill budget and the per-tick cap are actually
+    ///      reached rather than assumed unreachable.
+    function crowdOneTick(uint8 count) public {
+        (, int24 tick,,) = StateLibrary.getSlot0(manager, key.toId());
+        int24 t = ((tick / key.tickSpacing) + 1) * key.tickSpacing;
+        uint128 poolLiq = StateLibrary.getLiquidity(manager, key.toId());
+        uint128 size = poolLiq / 5_000;
+        uint256 n = uint256(count) % 30;
+        for (uint256 i; i < n; ++i) {
+            try hook.createOrder(key, t, size) returns (uint256 id) {
+                live.push(id);
+            } catch {
+                break;
+            }
+        }
+    }
+
     function moveMarket(int16 targetOffset) public {
         (, int24 cur,,) = StateLibrary.getSlot0(manager, key.toId());
         int24 target = cur + (int24(targetOffset) % 600);
@@ -138,27 +176,29 @@ contract AirbagInvariantsTest is Test, Deployers {
         targetContract(address(handler));
     }
 
-    /// @dev The one that matters. Every rebate credited to a live order is a claim on tokens the
-    ///      hook is holding right now — nothing is owed from a future swap. If this can ever be
-    ///      broken, some maker's claim fails at the moment they try to exercise it.
-    function invariant_rebatesAreFullyBacked() public view {
+    /// @dev The one that matters, and the one that was quietly toothless. It summed only the
+    ///      rebates, ignoring `owed0/owed1` — the banked principal, two to three orders of
+    ///      magnitude larger and sitting in the very same balance. So it passed on a contract
+    ///      that could no longer pay its makers. Every claim a live order can make has to be
+    ///      backed by tokens the hook holds right now, and that means all of it.
+    function invariant_claimsAreFullyBacked() public view {
         uint256 owed0;
         uint256 owed1;
         uint256 n = handler.liveCount();
         for (uint256 i; i < n; ++i) {
             AirbagOrders.Order memory o = hook.orderOf(handler.liveAt(i));
-            owed0 += o.rebate0;
-            owed1 += o.rebate1;
+            owed0 += uint256(o.owed0) + o.rebate0;
+            owed1 += uint256(o.owed1) + o.rebate1;
         }
         assertGe(
             IERC20(Currency.unwrap(currency0)).balanceOf(address(hook)),
             owed0,
-            "hook must hold every currency0 rebate it has promised"
+            "hook must hold every currency0 claim it has promised"
         );
         assertGe(
             IERC20(Currency.unwrap(currency1)).balanceOf(address(hook)),
             owed1,
-            "hook must hold every currency1 rebate it has promised"
+            "hook must hold every currency1 claim it has promised"
         );
     }
 
