@@ -3,8 +3,9 @@
 **Hard requirements:** ≤ 5 minutes · **your own live voice**, no AI narration. Failing either means
 the project is not judged at all, and is disqualified from Demo Day. Everything else is a preference.
 
-**Narration is 530 words.** At 130 words a minute — a careful, unhurried pace — that is **4:05**,
-which leaves the rest of the budget for the live transaction and for breathing. Do not try to fill
+**Narration is 545 words.** At 120 words a minute — a slow, careful pace — that is 4:16, and even
+with the live transaction it lands under 4:45. That margin is deliberate: the cap is the one thing
+here that cannot be argued with afterwards. Do not try to fill
 five minutes; a tight four beats a padded five.
 
 Record in **English**. An accent is entirely normal in this cohort; reading too fast is not. Read it
@@ -63,9 +64,9 @@ aloud once before recording, and wherever you stumble, change the wording rather
 > This is live on Base and Unichain mainnet. Real pools, real money — dust, but real. I'll place an
 > order now.
 >
-> One tick spacing of liquidity, and the order is an ERC-721. That matters: a rebate needs a
-> specific recipient, and a token has one. Other designs return recaptured value to the pool at
-> large — correct for a pool, useless to the person who actually got run over.
+> One tick spacing of liquidity, and the order is an ERC-721 — because a rebate needs a specific
+> recipient, and a token has one. Other designs return recaptured value to the pool at large:
+> correct for a pool, useless to the person who got run over.
 
 ## 2:15 – 3:05 · The proof
 
@@ -76,13 +77,11 @@ aloud once before recording, and wherever you stumble, change the wording rather
 > seventy basis points past it. Then the claim.
 >
 > The rule: subtract the five basis point fee, charge what's left marginally — seventy percent of
-> the first band, fifty percent beyond. That is **thirty-three point five** basis points of the
-> order's notional.
+> the first band, fifty beyond. That is **thirty-three point five** basis points of the order's
+> notional. It paid thirty-three point five. Not approximately.
 >
-> It paid thirty-three point five. Not approximately.
->
-> Same cycle on Unichain, where the pair sorts the other way — the order rests below the market and
-> sells into a falling tick. Same seventy. Same thirty-three point five.
+> Same cycle on Unichain, where the pair sorts the other way round. Same seventy. Same
+> thirty-three point five.
 
 ## 3:05 – 3:50 · What was hard, and what is still open
 
@@ -91,12 +90,12 @@ aloud once before recording, and wherever you stumble, change the wording rather
 > Two adversarial audit rounds ran before deployment. Round one found eight blockers. Round two
 > found two criticals — and both were mine, written while fixing round one.
 >
-> One made every exact-output swap pay nothing. The other left the hook owing more than it held,
-> which locks maker principal. The invariant that should have caught both was summing the wrong
-> field. I fixed the detector first, and it caught the insolvency immediately.
+> One left the hook owing more than it held, which locks maker principal. The invariant that should
+> have caught it was summing the wrong field — so I fixed the detector first, and it caught the
+> insolvency immediately.
 >
-> Three findings are open on purpose and written down. And two honest limits here: the pools hold
-> dust, and the crossing swaps were mine — a pool this shallow does not attract arbitrage.
+> Three findings are open on purpose and written down. Two honest limits here too: the pools hold
+> dust, and the crossing swaps were mine.
 
 ## 3:50 – 4:10 · Close
 
