@@ -37,6 +37,11 @@ The maker was not robbed: they got their limit price. Airbag returns the part of
 their own order made possible. On a median fill the maker is already net positive and the hook
 correctly pays nothing; it matters in the tail.
 
+## Explainer
+
+A one-page walkthrough of the mechanism, the measured evidence, and the known limits:
+https://claude.ai/code/artifact/1ccfe6d2-3cb0-4284-a266-c75fd0de1512 (source in `site/`)
+
 ## Known limits
 
 See [docs/KNOWN-LIMITS.md](docs/KNOWN-LIMITS.md). Found by adversarial review before deployment,

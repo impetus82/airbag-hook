@@ -795,3 +795,32 @@ displacement 2 bps, tail 18–24 bps.
     exactly what the contract charged against in the first place.
 
 ---
+
+## Day 19 — 25 Aug
+
+**Goal: something a judge can look at in sixty seconds.**
+
+### Built
+
+`site/index.html` — a single self-contained page: the problem, the mechanism, the evidence, and
+where it stops. Published so the submission has a link.
+
+### Decisions
+
+**An explainer rather than a wallet-connected dApp.** Nothing is deployed, so a dApp would have
+nothing to connect to, and the submission's frontend requirement is already satisfied by the test
+suite. What actually helps a judge is understanding the mechanism quickly and believing the
+numbers — so the page does that, and doubles as the visual material for the demo video.
+
+**The tick ladder is the page.** The most characteristic object in this subject's world is a price
+path crossing a resting order and continuing past it, with the region beyond shaded. That one
+drawing explains the entire mechanism, including the part that is easiest to get wrong: crossing
+your own range *is* the fill, at the price you asked for, so only what lies beyond the far edge is
+displacement.
+
+**The limits get their own section, not a footnote.** Two audits, 65 findings, 48 surviving
+refutation, 8 blockers closed — and the rest written down. A hook that says where it stops is
+more useful than one that quietly falls short, and judges have seen enough submissions that only
+describe their best case.
+
+---
