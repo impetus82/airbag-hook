@@ -18,7 +18,11 @@ export const DEPLOYMENTS = {
     label: "Unichain",
     hook: "0x82f8fF08608a4357a9BB12F7439b43453CF6C0C4",
     poolId: "0xbc9274f6583561fd0e69fa1f9a133b2063fe0815e9ab53d6ff1e17c38b4dcbf5",
-    stateView: "0x86e8631A016F9068C3f085FAF484Ee3F5fDee8F2",
+    // EIP-55 checksummed, and it has to be: viem rejects a mis-cased address before it issues any
+    // request. This one was wrong in two characters, so the panel read nothing on Unichain — with
+    // no error, no console warning and nothing on the wire, because a rejected address never
+    // becomes a request to notice missing.
+    stateView: "0x86e8631A016F9068C3f085fAF484Ee3F5fDee8f2",
     currency0: { address: "0x078D782b760474a361dDA0AF3839290b0EF57AD6", symbol: "USDC", decimals: 6 },
     currency1: { address: "0x4200000000000000000000000000000000000006", symbol: "WETH", decimals: 18 },
     fee: 500,
