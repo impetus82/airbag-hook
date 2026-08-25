@@ -1,0 +1,104 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Airbag — thumbnail</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+  :root{
+    --ground:#0B0F16; --surface:#131924; --line:#232D3D; --line-bright:#33415A;
+    --ink:#E9EDF4; --muted:#8593A8; --dim:#5D6A7E;
+    --accent:#F0A054; --accent-dim:#7A5A32; --data:#58C0A8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1600px;height:900px;background:var(--ground);overflow:hidden}
+  body{
+    font-family:Archivo,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    color:var(--ink); padding:74px 88px; display:flex; flex-direction:column;
+    background:
+      radial-gradient(1100px 620px at 76% 34%, rgba(240,160,84,.10), transparent 62%),
+      var(--ground);
+  }
+  .top{display:flex; justify-content:space-between; align-items:flex-start}
+  h1{font-size:104px; font-weight:700; letter-spacing:-3.5px; line-height:.94}
+  .rule{width:132px;height:7px;background:var(--accent);border-radius:4px;margin:22px 0 20px}
+  .tag{font-size:33px;color:var(--muted);font-weight:400}
+  .chip{
+    font-family:"JetBrains Mono",ui-monospace,monospace; font-size:20px; letter-spacing:.4px;
+    color:var(--accent); border:1.5px solid var(--accent-dim); border-radius:999px;
+    padding:12px 22px; background:rgba(240,160,84,.07); white-space:nowrap;
+  }
+  .mid{flex:1; display:flex; align-items:center; justify-content:center; margin:6px 0 4px}
+  .stats{display:grid; grid-template-columns:repeat(3,1fr); gap:52px; border-top:1.5px solid var(--line); padding-top:34px}
+  .n{font-family:"JetBrains Mono",ui-monospace,monospace; font-size:56px; font-weight:600; letter-spacing:-1.5px}
+  .n.a{color:var(--accent)} .n.d{color:var(--data)}
+  .k{font-size:24px; color:var(--muted); margin-top:10px; line-height:1.32}
+  .k b{color:var(--ink); font-weight:600}
+  .foot{display:flex; justify-content:space-between; align-items:center; margin-top:30px;
+        font-family:"JetBrains Mono",ui-monospace,monospace; font-size:21px; color:var(--dim)}
+</style>
+
+<div class="top">
+  <div>
+    <h1>Airbag</h1>
+    <div class="rule"></div>
+    <div class="tag">impact protection for limit orders</div>
+  </div>
+  <div class="chip">UNISWAP&nbsp;v4&nbsp;HOOK&nbsp;&nbsp;·&nbsp;&nbsp;UHI10</div>
+</div>
+
+<div class="mid">
+<svg width="1330" height="376" viewBox="0 0 1330 376" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- the swap sweeping through the order and carrying on past it -->
+  <path d="M40 86 H1180" stroke="#E06A5C" stroke-width="5" stroke-linecap="round"/>
+  <path d="M1180 86 l-26 -15 v30 z" fill="#E06A5C"/>
+  <text x="252" y="60" fill="#E06A5C" font-family="Archivo,sans-serif" font-size="24" font-weight="600">the swap that fills you…</text>
+  <text x="800" y="60" fill="#E06A5C" font-family="Archivo,sans-serif" font-size="24" font-weight="600">…and keeps going</text>
+
+  <!-- displacement, bracketed from the edge where the fill completed -->
+  <path d="M680 118 v24 M1180 118 v24 M680 130 H1180" stroke="#8593A8" stroke-width="2.5" stroke-dasharray="7 6"/>
+  <text x="930" y="166" fill="#8593A8" font-family="Archivo,sans-serif" font-size="23" text-anchor="middle">displacement — measured in the same transaction</text>
+
+  <!-- tick ladder -->
+  <line x1="20" y1="256" x2="1310" y2="256" stroke="#232D3D" stroke-width="2.5"/>
+  <g stroke="#2C384B" stroke-width="2.5">
+    <line x1="60"  y1="256" x2="60"  y2="238"/><line x1="120" y1="256" x2="120" y2="238"/>
+    <line x1="180" y1="256" x2="180" y2="238"/><line x1="240" y1="256" x2="240" y2="238"/>
+    <line x1="300" y1="256" x2="300" y2="238"/><line x1="360" y1="256" x2="360" y2="238"/>
+    <line x1="420" y1="256" x2="420" y2="238"/><line x1="480" y1="256" x2="480" y2="238"/>
+    <line x1="720" y1="256" x2="720" y2="238"/><line x1="780" y1="256" x2="780" y2="238"/>
+    <line x1="840" y1="256" x2="840" y2="238"/><line x1="900" y1="256" x2="900" y2="238"/>
+    <line x1="960" y1="256" x2="960" y2="238"/><line x1="1020" y1="256" x2="1020" y2="238"/>
+    <line x1="1080" y1="256" x2="1080" y2="238"/><line x1="1140" y1="256" x2="1140" y2="238"/>
+    <line x1="1200" y1="256" x2="1200" y2="238"/><line x1="1260" y1="256" x2="1260" y2="238"/>
+  </g>
+
+  <!-- the maker's resting order: one tick spacing of liquidity, labelled to its left -->
+  <rect x="540" y="200" width="140" height="56" rx="7" fill="rgba(240,160,84,.16)" stroke="#F0A054" stroke-width="3"/>
+  <text x="516" y="226" fill="#F0A054" font-family="Archivo,sans-serif" font-size="23" font-weight="600" text-anchor="end">your order</text>
+  <text x="516" y="253" fill="#5D6A7E" font-family="Archivo,sans-serif" font-size="20" text-anchor="end">filled at your price</text>
+
+  <!-- a capped share of the overshoot, returning to that specific order -->
+  <path d="M1180 286 C 1090 356, 820 350, 706 268" stroke="#F0A054" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+  <path d="M706 268 l32 2 -11 -22 z" fill="#F0A054"/>
+  <text x="950" y="368" fill="#F0A054" font-family="Archivo,sans-serif" font-size="24" font-weight="600" text-anchor="middle">a capped share comes back to you</text>
+</svg>
+</div>
+
+<div class="stats">
+  <div>
+    <div class="n d">2.00 bps</div>
+    <div class="k">median over <b>253,135 swaps</b> — below the fee, so nothing is charged</div>
+  </div>
+  <div>
+    <div class="n">24 bps</div>
+    <div class="k">the tail it exists for — <b>22.5%</b> of fills, where makers do lose</div>
+  </div>
+  <div>
+    <div class="n a">33.50 bps</div>
+    <div class="k">owed on mainnet, and <b>exactly</b> what was paid — on both chains</div>
+  </div>
+</div>
+
+<div class="foot">
+  <div>live on Base + Unichain · no oracle · no keeper · orders are ERC-721</div>
+  <div>github.com/impetus82/airbag-hook</div>
+</div>
