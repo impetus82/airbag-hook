@@ -713,3 +713,39 @@ than admitting the gap.
     and `.gitignore` now covers the pattern so it cannot reach a commit a third time.
 
 ---
+
+## Day 17 — 25 Aug
+
+**Goal: stop the audit spiral at the right place, and be explicit about where it stopped.**
+
+### Built
+
+Bucket walking is now forward rather than backward, so the queue at a tick is served roughly in
+the order it formed. Backwards made it strictly last-in-first-out, which turns queue position
+into something an attacker can buy: place after a maker, get served before them, and spend the
+fill budget on your own orders while theirs is left behind.
+
+`BlockFillOverflow` is emitted when the block's fill list saturates, so the residual gap is
+observable from the first block rather than invisible.
+
+`docs/KNOWN-LIMITS.md` — the findings that are real, judged, and deliberately not fixed, each
+with the reason and with what bounds the damage instead.
+
+### Decision: three rounds of fixes is where this stops
+
+Two audits, three rounds of repairs, and the second round found that my own fix for the first had
+opened a larger hole than it closed. That pattern is a warning. The remaining findings are real
+but none of them risks principal, whereas the presentation deliverables — video, frontend,
+thumbnail, the three essays — are not started, and the video is a pass/fail gate: without it
+nothing is judged at all.
+
+So the remaining three are documented rather than patched: the JIT-manipulable size guards need a
+time-weighted depth measure the design deliberately does not have, the block fill list needs to
+key on ticks rather than orders, and exact queue ordering needs a head pointer and tombstones.
+All three are restructures, and rushing a restructure is how the last two criticals got written.
+
+Writing them down is not a consolation prize. A hook that says where it stops is more useful than
+one that quietly falls short, and every one of these was found before anything was deployed
+rather than after.
+
+---

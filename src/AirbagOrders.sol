@@ -172,6 +172,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     event RebateCredited(uint256 indexed orderId, bool inCurrency0, uint256 amount, uint256 displacementBps);
     event FillScanTruncated(PoolId indexed poolId, int24 reachedTick);
     event FillsDeferred(PoolId indexed poolId, int24 atTick);
+    event BlockFillOverflow(PoolId indexed poolId, uint256 orderId);
 
     constructor(IPoolManager manager_) ERC721("Airbag Limit Order", "AIRBAG") {
         _manager = manager_;
@@ -476,15 +477,26 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         int24 spacing = ctx.spacing;
         uint256[] storage bucket = _waiting[poolId][tick];
         uint256 len = bucket.length;
-        for (uint256 i = len; i > 0;) {
-            unchecked {
-                --i;
-            }
+        // Forward, so the queue at a tick is served roughly in the order it formed. Iterating
+        // backwards made it strictly last-in-first-out, which turns queue position into something
+        // an attacker can buy: place after a maker, get served before them, and spend the fill
+        // budget on your own orders while theirs is left behind.
+        //
+        // Not perfectly FIFO: removal is swap-and-pop, so the element moved into the vacated slot
+        // is examined next and jumps ahead of its neighbours. Making it exact needs a head
+        // pointer and tombstones, which is a heavier change than the remaining time justifies.
+        // Stated here rather than claimed away.
+        for (uint256 i; i < bucket.length;) {
             uint256 id = bucket[i];
             Order storage o = orders[id];
             // Both directions can rest on the same tick at different times, so decide per order.
             bool crossed = o.zeroForOne ? (postTick >= tick + spacing) : (postTick < tick);
-            if (!crossed) continue;
+            if (!crossed) {
+                unchecked {
+                    ++i;
+                }
+                continue;
+            }
             if (ctx.fillBudget == 0) {
                 emit FillsDeferred(poolId, tick);
                 return subtotal; // recoverable via settleFills
@@ -619,6 +631,14 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         if (bf.count < MAX_BLOCK_FILLS) {
             bf.ids[bf.count] = id;
             bf.count++;
+        } else {
+            // KNOWN LIMIT, deliberately observable rather than silent. Beyond this many fills in
+            // one block an order is not revisitable, so a filler who first saturates the list can
+            // then split their swap and escape the top-up. Raising the constant does not fix it —
+            // the number of swaps in a block is unbounded. The real fix is to remember the TICKS
+            // touched rather than the orders, since orders at a tick share a base, and that is a
+            // restructure rather than a patch. Until then this is monitorable from day one.
+            emit BlockFillOverflow(poolId, id);
         }
     }
 
