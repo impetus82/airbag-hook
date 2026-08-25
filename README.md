@@ -47,6 +47,14 @@ correctly pays nothing; it matters in the tail.
 Both verified; addresses, pool ids and transactions in [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md).
 A hackathon deployment on dust-seeded pools — read the known limits first.
 
+## It works on mainnet, to the basis point
+
+A full cycle on Base — [place](https://basescan.org/tx/0x7fce3af9d3a92001ec85a613c6a865fe231a388c4f04631be8264230206f539b),
+[cross](https://basescan.org/tx/0x46a3f13febfad4ed45d4248afed118703329da9018b636060aff3f39de547af7),
+[claim](https://basescan.org/tx/0x728e0aff7d4b77558b670cba2fd0351031d9582044b0f2b6c80045dab9419534).
+The hook measured 70 bps of displacement past the maker, and the charge rule says 33.50 bps of
+their notional is owed. It paid 33.50 bps. See [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md).
+
 ## Try it
 
 **https://impetus82.github.io/airbag-hook/** — reads both live pools, places orders, shows the

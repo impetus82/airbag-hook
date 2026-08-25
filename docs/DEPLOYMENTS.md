@@ -54,6 +54,30 @@ seed is still stranded on Unichain. A one-line omission that costs whatever went
 Order size is bounded relative to pool depth — at least 1 bp of it, at most 1% — so with this seed
 a demo order runs from 5,000,000 to 500,000,000 liquidity units.
 
+## Proof of life — Base, 25 August
+
+A full cycle against the live contract: an order placed, crossed by a swap that carried on past
+it, measured, charged, credited and claimed.
+
+| | |
+|---|---|
+| place order #1 (tick −199780) | [`0x7fce3af9…6f539b`](https://basescan.org/tx/0x7fce3af9d3a92001ec85a613c6a865fe231a388c4f04631be8264230206f539b) |
+| swap through it, on to −199700 | [`0x46a3f13f…547af7`](https://basescan.org/tx/0x46a3f13febfad4ed45d4248afed118703329da9018b636060aff3f39de547af7) |
+| claim | [`0x728e0aff…419534`](https://basescan.org/tx/0x728e0aff7d4b77558b670cba2fd0351031d9582044b0f2b6c80045dab9419534) |
+
+**The numbers match the rule exactly.** The hook recorded 70 bps of displacement. The threshold is
+the pool's 5 bps fee, so 65 bps were uncompensated, charged marginally: 5 bps at 70% plus 60 bps
+at 50% = **33.50 bps**. It credited 1,823,077 wei of WETH against an order notional of 544,202,355
+wei — **33.50 bps**. Not approximately.
+
+Two honest notes. The amounts are dust because the pool is: the order was worth a fraction of a
+cent, and the rebate proportionally less. And the crossing swap was mine. The intent was for live
+arbitrage to do it — the pool was initialised below the wider market precisely so that flow would
+walk the price up through the order — and it moved partway before stopping, which turns out to be
+the correct answer: with about thirty cents in the pool, the remaining mispricing is worth less
+than the gas to capture it. A dust pool does not attract arbitrage. That is a fact about
+demonstration pools, not about the hook.
+
 ## This is a hackathon deployment
 
 The pools are seeded with dust. The contract is immutable and permissionless, so anyone can

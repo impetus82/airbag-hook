@@ -866,3 +866,28 @@ hookathon could only add, so its seed is still stranded on Unichain. One line, p
     That is a considerably better proof of life.
 
 ---
+
+## Day 21 — 25 Aug
+
+**Goal: prove it on mainnet, not in a fork.**
+
+A full cycle on Base: order placed at tick −199780, a swap crossed it and carried on to −199700,
+the hook measured, charged, credited, and the maker claimed.
+
+**It matched the rule exactly.** 70 bps of displacement recorded. Threshold is the pool's 5 bps
+fee, leaving 65 bps uncompensated, charged marginally at 5 bps × 70% + 60 bps × 50% = 33.50 bps.
+Credited: 1,823,077 wei of WETH against a notional of 544,202,355 — 33.50 bps. Zero divergence
+between the rule as written and the rule as executed on a live chain.
+
+### The part that did not go to plan
+
+The crossing swap was mine. The intent was for live arbitrage to do it: the pool had been
+initialised below the wider market, so flow should have walked the price up through the order,
+and an order filled by a stranger's bot is far better evidence than one I crossed myself.
+
+Arbitrage moved the price partway and stopped — and the reason is the honest one. The pool holds
+about thirty cents, so the remaining mispricing is worth less than the gas to capture it. A dust
+pool does not attract arbitrage. That is a fact about demonstration pools rather than about the
+hook, and it goes in the video that way rather than being quietly omitted.
+
+---
