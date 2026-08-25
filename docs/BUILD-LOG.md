@@ -952,3 +952,62 @@ out of the broadcast file. The three Base hashes already published turned out to
 that was luck, not method.
 
 ---
+
+## Day 23 — 25 Aug
+
+**Goal: the front end shows nothing on Unichain. Find out why.**
+
+Four em-dashes where the price, tick, fee and liquidity should be. Base fine, Unichain blank. No
+error, no console warning, and — checked with an interceptor on `fetch` — **no request on the
+wire at all**.
+
+I got the diagnosis wrong first. `useReadContracts` sends a plain eth_call for one contract and
+aggregates through Multicall3 from two upwards, and that matched the symptom exactly: `ownerOf`,
+a single read, worked on Unichain; the pool panel and the order form, two reads each, did not. The
+local Unichain chain definition had no `multicall3` entry while `base` arrives from wagmi/chains
+carrying one. Declared it, verified `aggregate3` against the pool by hand, deployed — no change.
+Verified the declaration was in the served bundle — still no change.
+
+So I stopped guessing and made the failure visible: the panel now distinguishes *loading* from
+*broken* instead of printing the same em-dash for both. It said:
+
+> Address "0x86e8631A016F9068C3f085FAF484Ee3F5fDee8F2" is invalid
+
+**Two characters of wrong case in the EIP-55 checksum.** viem rejects a mis-cased address before
+issuing any request, which is why there was nothing on the wire to find. The multicall workaround
+came out; the declaration stayed, because it was genuinely missing and a two-value read needs it.
+
+Worth stating plainly: the change that found the bug was not a clever hypothesis, it was refusing
+to let a failure stay silent. The hypothesis cost an hour. The error message cost one line.
+
+### Then the demo turned out to be dead anyway
+
+Liquidity read `0.0e+0` on both chains, and the order form offered a range of `0 to 0`. My own
+proof-of-life swaps had pushed each price out of its seeded band, so a judge clicking *Place
+order* would have got a revert.
+
+Zero liquidity has one useful property: with nothing to trade against, moving the price costs only
+gas. Each pool was walked to the live market tick for a few cents and then re-seeded, so the band
+now sits where the market actually is — 21 ticks off, a fifth of a percent — instead of 15%
+below it, which is what invited the arbitrage that emptied it in the first place.
+
+The first seed was centred on 1,866 USDC per WETH, a constant inherited from a project a year
+older, against a market near 2,460. **A band is only as good as the price it was centred on.** This
+one reads the market immediately before writing.
+
+### Housekeeping that was overdue
+
+`test-refute-rising`, `test-refute-scan`, `test-shared-position` — the audit tooling's PoC
+scaffolding — were still in the repository. The `.gitignore` patterns went in back in August but
+the already-tracked files never left the index, and `.gitignore` has no opinion about files git is
+already tracking. They were never compiled, because foundry.toml points at `test/`, which is
+exactly why nothing ever complained. Gone now.
+
+The `gh-pages` branch also held a full copy of the repository alongside the export. It is a build
+artifact branch; it holds the artifact.
+
+And for the second time, `broadcast/*.json` mapped a hash to the wrong call — it labelled a
+contract deployment as the seed's `modify`. Every hash in this document is now resolved with
+`cast tx` against the chain.
+
+---

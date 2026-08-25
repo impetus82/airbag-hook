@@ -54,6 +54,35 @@ seed is still stranded on Unichain. A one-line omission that costs whatever went
 Order size is bounded relative to pool depth — at least 1 bp of it, at most 1% — so with this seed
 a demo order runs from 5,000,000 to 500,000,000 liquidity units.
 
+### Re-priced to the market and re-seeded, 25 August
+
+That first seed was centred on a price copied from an older project — about 1,866 USDC per WETH
+against a market near 2,460. Arbitrage walked each pool to the edge of its band and stopped there,
+the proof-of-life swaps carried the price the rest of the way out, and both pools were left holding
+**zero active liquidity**: nothing to fill an order against, and a front end correctly reporting a
+depth of nought.
+
+Zero liquidity has one useful property. There is nothing to trade against, so moving the price
+costs only gas — each pool was walked to the live market tick for a few cents of it, and only then
+re-seeded, so the band is centred where the market actually is and arbitrage has no reason to eat
+it.
+
+| | Base | Unichain |
+|---|---|---|
+| re-price swap | [`0x88ac8157…35c7b3`](https://basescan.org/tx/0x88ac815743aaa5adb38d28dbfe784bf7eb1106002e25683d18c4c1d8d535c7b3) | [`0xb200ef7e…dff9ac`](https://uniscan.xyz/tx/0xb200ef7e1bf2aa8ea1bc422c09df84be4d4e75bca65911f980e9a68a7ddff9ac) |
+| tick, before → after | −199700 → −198240 | 199740 → 198240 |
+| seed router | `0x9188D9F888068F34457fCe9E1A6Af6F7CAF21eb4` | `0x87fBa32fc0eDB3bC1E059a297928095719300463` |
+| seed tx | [`0x75eab8e6…eda74d`](https://basescan.org/tx/0x75eab8e67326413da3a8a1ae3ce88d2a5a8a78158945a2b7e38906f72aeda74d) | [`0x341c252f…dea9be`](https://uniscan.xyz/tx/0x341c252f51bdb63da981affe85182cd5f3a2ae81e5fd261f583dc44538dea9be) |
+| range | [−199440, −197040] | [197040, 199440] |
+| cost | 0.0000587 WETH + 0.1444 USDC | 0.1340 USDC + 0.0000633 WETH |
+
+Both pools now hold 50,000,000,000 units again, at ±198240 against a market tick of −198261 — 21
+ticks, a fifth of a percent. The ranges are exact mirrors because the pairs sort opposite ways.
+
+The lesson is the one from the first seed, generalised: **a band is only as good as the price it
+was centred on**, and that price has a shelf life. The first seed inherited a constant from a
+project a year older; this one reads the market immediately before writing.
+
 ## Proof of life — Base, 25 August
 
 A full cycle against the live contract: an order placed, crossed by a swap that carried on past
@@ -130,6 +159,10 @@ about, confirmed on a live chain rather than in a test.
 Of the 70 bps here, the first 10 consumed real liquidity before the price left the seeded band;
 the remaining 60 crossed empty ticks. The same caveat as Base, and the reason it is stated twice
 is that it is the honest limit of what these pools can show.
+
+Both pools were re-priced to the live market and re-seeded straight afterwards — see above. That
+does not retrospectively deepen either demonstration; it means an order placed today rests in a
+band centred on the real price, with liquidity on both sides of it.
 
 ## This is a hackathon deployment
 
