@@ -6,7 +6,7 @@ import { DEPLOYMENTS, SupportedChainId, stateViewAbi, tickToPrice } from "@/lib/
 export function PoolPanel({ chainId }: { chainId: SupportedChainId }) {
   const d = DEPLOYMENTS[chainId];
 
-  const { data } = useReadContracts({
+  const { data, error } = useReadContracts({
     contracts: [
       { chainId, address: d.stateView as `0x${string}`, abi: stateViewAbi, functionName: "getSlot0", args: [d.poolId as `0x${string}`] },
       { chainId, address: d.stateView as `0x${string}`, abi: stateViewAbi, functionName: "getLiquidity", args: [d.poolId as `0x${string}`] },
@@ -16,6 +16,11 @@ export function PoolPanel({ chainId }: { chainId: SupportedChainId }) {
 
   const slot0 = data?.[0]?.result as readonly [bigint, number, number, number] | undefined;
   const liquidity = data?.[1]?.result as bigint | undefined;
+
+  // Say so when the read fails. This panel spent a day showing four em-dashes on Unichain while
+  // the request never left the browser, and a dash that means "loading" and a dash that means
+  // "broken" being the same glyph is what made it cost a day.
+  const readFailed = error ?? data?.find((r) => r.status === "failure")?.error;
   const tick = slot0?.[1];
   const lpFee = slot0?.[3];
 
@@ -55,10 +60,16 @@ export function PoolPanel({ chainId }: { chainId: SupportedChainId }) {
         </div>
       </div>
 
-      <p className="hint" style={{ marginTop: 14 }}>
-        The pool fee is also the threshold. A fill that lands within {lpFee !== undefined ? lpFee / 100 : "—"} bps
-        of your price costs the swapper nothing, because that fee already made you whole.
-      </p>
+      {readFailed ? (
+        <p className="hint" style={{ marginTop: 14, color: "var(--bad, #ff6b6b)" }}>
+          Could not read the pool on {d.label}: {readFailed.message.split("\n")[0]}
+        </p>
+      ) : (
+        <p className="hint" style={{ marginTop: 14 }}>
+          The pool fee is also the threshold. A fill that lands within {lpFee !== undefined ? lpFee / 100 : "—"} bps
+          of your price costs the swapper nothing, because that fee already made you whole.
+        </p>
+      )}
     </div>
   );
 }
