@@ -824,3 +824,45 @@ more useful than one that quietly falls short, and judges have seen enough submi
 describe their best case.
 
 ---
+
+## Day 20 — 25 Aug
+
+**Goal: deploy for real, and give it a front end.**
+
+### Built
+
+Live on Base and Unichain, both verified, both pools seeded with 50,000,000,000 liquidity. Deploy
+cost 0.0000244 ETH across both chains; seeding 0.0000674 WETH + 0.126 USDC each. Addresses,
+transactions and the seed routers are in `docs/DEPLOYMENTS.md`.
+
+A Next.js/wagmi front end reading the live pools: price, tick, the pool fee shown as what it
+actually is — the threshold — order placement with the size bounds derived from pool depth, and
+your orders with their rebate.
+
+### Decisions
+
+**Mainnet rather than testnet.** I had recommended testnet because three audit findings are
+deliberately open. That was the wrong read: those findings are all about extracting value, and a
+dust-seeded pool has nothing to extract, so the risk was theoretical while the pitch value was
+real. The residual — an immutable permissionless contract someone else could pool real funds
+against — is covered by documenting the limits prominently rather than by hiding on a testnet.
+
+**The seed router can withdraw as well as deposit.** The equivalent router from the previous
+hookathon could only add, so its seed is still stranded on Unichain. One line, permanent cost.
+
+### Challenges
+
+26. **I initialised both pools at a price a year out of date.** `INITIAL_TICK` was carried over
+    from the previous project's constants — 1866 USDC per WETH — while the market is around 2470.
+    A pool born a quarter below market is an open invitation, and arbitrageurs had moved it to
+    2104 within minutes of the seed landing.
+
+    The money at stake was cents, the liquidity is intact, and the demo does not depend on the
+    absolute price — so it stays. But the lesson is the general one: a constant copied from an
+    older project is a value nobody has checked, and prices in particular have a shelf life.
+
+    There is an upside worth naming: real arbitrage flow now runs through the pool, so an order
+    placed in its path may well be filled by a live bot rather than by me swapping against myself.
+    That is a considerably better proof of life.
+
+---
