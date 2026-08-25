@@ -9,6 +9,7 @@ import {IPoolManager} from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
+import {SqrtPriceMath} from "@uniswap/v4-core/src/libraries/SqrtPriceMath.sol";
 import {SwapParams, ModifyLiquidityParams} from "@uniswap/v4-core/src/types/PoolOperation.sol";
 import {PoolSwapTest} from "@uniswap/v4-core/src/test/PoolSwapTest.sol";
 import {HookMiner} from "v4-periphery/test/shared/HookMiner.sol";
@@ -86,6 +87,10 @@ contract BacktestTest is Test, Deployers {
         uint256 rebate0;
         uint256 rebate1;
         uint256 replayed;
+        uint256 medianBps; // rebate as bps of the maker's own proceeds, median over paid fills
+        uint256 p90Bps;
+        uint256 maxBps;
+        uint256 measurable; // fills where rebate and proceeds share a currency, so a ratio exists
     }
 
     function test_replayHistory() public {
@@ -96,6 +101,10 @@ contract BacktestTest is Test, Deployers {
         emit log_named_uint("of which compensated", r.compensated);
         emit log_named_uint("rebate currency0    ", r.rebate0);
         emit log_named_uint("rebate currency1    ", r.rebate1);
+        emit log_named_uint("measurable fills    ", r.measurable);
+        emit log_named_uint("rebate bps: median  ", r.medianBps);
+        emit log_named_uint("rebate bps: p90     ", r.p90Bps);
+        emit log_named_uint("rebate bps: max     ", r.maxBps);
 
         assertGt(r.replayed, 100, "the fixture must actually have been replayed");
         assertGt(r.fills, 0, "real history must fill some orders");
@@ -157,15 +166,58 @@ contract BacktestTest is Test, Deployers {
         }
         vm.closeFile(FIXTURE);
 
+        uint256[] memory bps = new uint256[](ids.length);
         for (uint256 i; i < ids.length; ++i) {
             AirbagOrders.Order memory o = hook.orderOf(ids[i]);
             if (!o.filled) continue;
             r.fills++;
-            if (uint256(o.rebate0) + o.rebate1 > 0) {
-                r.compensated++;
-                r.rebate0 += o.rebate0;
-                r.rebate1 += o.rebate1;
+            if (uint256(o.rebate0) + o.rebate1 == 0) continue;
+            r.compensated++;
+            r.rebate0 += o.rebate0;
+            r.rebate1 += o.rebate1;
+
+            // The maker's proceeds ARE the notional, denominated in the token they received —
+            // so no separate valuation is needed, and the ratio is directly comparable to the
+            // 30-day on-chain measurement that justified building this.
+            //
+            // The charge lands in the swap's unspecified currency, which is not always the one
+            // the order converted into. Where they differ a ratio would cross a units boundary,
+            // so those fills are counted but excluded from the distribution rather than fudged.
+            // The rebate has to be divided by a notional in ITS OWN currency. Dividing by the
+            // proceeds looks natural and is wrong twice over: an order that sold currency0 is
+            // paid in currency1 while carrying a dust remainder in currency0, and dividing by
+            // that remainder produced a median of 111% and a maximum of 37,972% — numbers a
+            // headline would have been delighted to quote.
+            //
+            // And the currencies structurally never match on an exact-input swap: an order that
+            // sold currency0 fills on a rising market, the swap doing the pushing buys currency0,
+            // and its unspecified currency is therefore currency0 — the opposite side from the
+            // maker's proceeds. So the denominator is the order's notional valued in the rebate's
+            // currency, which is exactly what the contract itself charged against.
+            uint160 sa = TickMath.getSqrtPriceAtTick(o.tickLower);
+            uint160 sb = TickMath.getSqrtPriceAtTick(o.tickLower + o.tickSpacing);
+            if (o.rebate0 > 0) {
+                uint256 n0 = SqrtPriceMath.getAmount0Delta(sa, sb, o.liquidity, false);
+                if (n0 > 0) bps[r.measurable++] = (uint256(o.rebate0) * 10_000) / n0;
+            } else if (o.rebate1 > 0) {
+                uint256 n1 = SqrtPriceMath.getAmount1Delta(sa, sb, o.liquidity, false);
+                if (n1 > 0) bps[r.measurable++] = (uint256(o.rebate1) * 10_000) / n1;
             }
+        }
+
+        if (r.measurable > 0) {
+            for (uint256 i = 1; i < r.measurable; ++i) {
+                uint256 v = bps[i];
+                uint256 j = i;
+                while (j > 0 && bps[j - 1] > v) {
+                    bps[j] = bps[j - 1];
+                    --j;
+                }
+                bps[j] = v;
+            }
+            r.medianBps = bps[r.measurable / 2];
+            r.p90Bps = bps[(r.measurable * 9) / 10];
+            r.maxBps = bps[r.measurable - 1];
         }
     }
 

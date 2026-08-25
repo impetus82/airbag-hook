@@ -749,3 +749,49 @@ one that quietly falls short, and every one of these was found before anything w
 rather than after.
 
 ---
+
+## Day 18 — 25 Aug
+
+**Goal: a headline number produced by the contract, in a unit that means something.**
+
+### The number
+
+Replaying 48 hours of real Base WETH/USDC history through AirbagHook itself:
+
+| | |
+|---|---|
+| swaps replayed | 1,055 |
+| orders filled | 611 |
+| compensated | 280 (46%) |
+| rebate, median | **3 bps** of notional |
+| rebate, p90 | **48 bps** |
+| rebate, max | 199 bps |
+
+The maximum landing at 199 against a `CAP_BPS` of 200 is a useful sanity check: the ceiling binds
+and nothing slips past it. More than half of all fills cost the swapper nothing at all, which is
+the design working rather than failing.
+
+There is no separate "without Airbag" run to compare against, because there is nothing to
+compare: the fill happens identically either way and the maker receives their limit price either
+way. The rebate *is* the difference, so measuring it is measuring the impact.
+
+**Stated with the pitch, not hidden below it:** this 48-hour window is roughly three times more
+volatile than typical. The representative figures remain the 30-day on-chain measurement — median
+displacement 2 bps, tail 18–24 bps.
+
+### Challenges
+
+24. **The first version of the metric would have produced a beautiful lie.** Dividing the rebate
+    by "the proceeds" and picking the currency by whichever field was non-zero meant dividing by a
+    dust remainder. It reported a median of 111% and a maximum of 37,972% — and the failure mode
+    of a metric like that is not a crash, it is a headline. Sanity-checking a number against
+    something it cannot physically exceed caught it; nothing else would have.
+
+25. **Fixing that produced zero measurable fills, which turned out to be a fact rather than a
+    bug.** On an exact-input swap the charge currency is structurally always the opposite of the
+    maker's proceeds currency: an order that sold currency0 fills on a rising market, the swap
+    pushing it buys currency0, and currency0 is therefore that swap's unspecified currency. So the
+    denominator has to be the order's notional valued in the rebate's own currency — which is
+    exactly what the contract charged against in the first place.
+
+---
