@@ -37,6 +37,16 @@ The maker was not robbed: they got their limit price. Airbag returns the part of
 their own order made possible. On a median fill the maker is already net positive and the hook
 correctly pays nothing; it matters in the tail.
 
+## Live
+
+| | Base | Unichain |
+|---|---|---|
+| hook | [`0x100d7855…0100C4`](https://basescan.org/address/0x100d7855adac79d90a75b7a89cf99a9f2b0100c4) | [`0x82f8fF08…C6C0C4`](https://uniscan.xyz/address/0x82f8ff08608a4357a9bb12f7439b43453cf6c0c4) |
+| pair | WETH/USDC 0.05% | USDC/WETH 0.05% |
+
+Both verified; addresses, pool ids and transactions in [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md).
+A hackathon deployment on dust-seeded pools — read the known limits first.
+
 ## Explainer
 
 A one-page walkthrough of the mechanism, the measured evidence, and the known limits:
