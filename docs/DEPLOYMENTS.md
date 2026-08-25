@@ -36,6 +36,24 @@ Both hook addresses end in `C4`. That is not decoration — a v4 hook's permissi
 its address, and those bits are what the PoolManager checks before calling any callback. An
 address that does not end that way would not be this hook.
 
+## Seeded pools
+
+Both pools carry **50,000,000,000 units of liquidity** across ±120 tick spacings around the
+initial price, confirmed on chain rather than from the broadcast log. Cost per chain: 0.0000674
+WETH + 0.126 USDC.
+
+| | Base | Unichain |
+|---|---|---|
+| seed router | `0x17d2458D25D3254844EeC70457860CDEEdeAf258` | `0xeEED1F1923CEC50217911B1E9843f717435e7DB7` |
+| seed tx | [`0xf6d793ec…52bd6b`](https://basescan.org/tx/0xf6d793ec21c1b77e4e517f5dcf0cc1203233ffc2d93e6647628c07166152bd6b) | [`0x60da201a…3bbecd4`](https://uniscan.xyz/tx/0x60da201a84eecc8b4e3fe091e2697e1af1251bfb70ac1bc6734065c653bbecd4) |
+
+The routers can **remove** liquidity as well as add it, so the seed is recoverable by its owner.
+That is not a given: the equivalent router from the previous hookathon could only add, and its
+seed is still stranded on Unichain. A one-line omission that costs whatever went in.
+
+Order size is bounded relative to pool depth — at least 1 bp of it, at most 1% — so with this seed
+a demo order runs from 5,000,000 to 500,000,000 liquidity units.
+
 ## This is a hackathon deployment
 
 The pools are seeded with dust. The contract is immutable and permissionless, so anyone can
