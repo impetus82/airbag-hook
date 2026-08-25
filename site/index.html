@@ -1,0 +1,315 @@
+<title>Airbag Hook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --ground: #F6F7F9;
+    --surface: #FFFFFF;
+    --ink: #131A26;
+    --muted: #5A6577;
+    --line: #DDE1E8;
+    --accent: #C2621A;
+    --accent-soft: #F6E7D8;
+    --data: #1F6F62;
+    --shadow: 0 1px 2px rgba(19, 26, 38, .05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0E1420;
+      --surface: #151D2B;
+      --ink: #E7EAF0;
+      --muted: #98A3B5;
+      --line: #26303F;
+      --accent: #E8933F;
+      --accent-soft: #2A2016;
+      --data: #57B8A4;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0E1420;
+    --surface: #151D2B;
+    --ink: #E7EAF0;
+    --muted: #98A3B5;
+    --line: #26303F;
+    --accent: #E8933F;
+    --accent-soft: #2A2016;
+    --data: #57B8A4;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px 96px; }
+  .col { max-width: 66ch; }
+
+  h1, h2, h3, .label { font-family: Archivo, "Helvetica Neue", Arial, sans-serif; }
+  h1 {
+    font-size: clamp(2.4rem, 6vw, 3.6rem);
+    line-height: 1.02; letter-spacing: -.025em; font-weight: 700;
+    margin: 0 0 .5rem; text-wrap: balance;
+  }
+  h2 {
+    font-size: 1.32rem; font-weight: 600; letter-spacing: -.01em;
+    margin: 0 0 .9rem; text-wrap: balance;
+  }
+  h3 { font-size: 1rem; font-weight: 600; margin: 0 0 .4rem; }
+  p { margin: 0 0 1.05rem; }
+  .lede { font-size: 1.2rem; color: var(--muted); margin-bottom: 0; }
+  .label {
+    font-size: .69rem; font-weight: 600; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  strong { font-weight: 600; }
+  code, .num { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  code { font-size: .87em; background: var(--accent-soft); padding: .1em .35em; border-radius: 3px; }
+  a { color: var(--ink); text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  header { padding: 84px 0 40px; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 26px;
+    font-family: "JetBrains Mono", monospace; font-size: .78rem; color: var(--muted);
+  }
+
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+
+  figure { margin: 26px 0 8px; }
+  figcaption { font-size: .84rem; color: var(--muted); margin-top: 12px; max-width: 62ch; }
+  .scroller { overflow-x: auto; }
+  svg { display: block; width: 100%; height: auto; min-width: 560px; }
+
+  .steps { display: grid; gap: 18px; margin: 22px 0 4px; }
+  @media (min-width: 720px) { .steps { grid-template-columns: repeat(3, 1fr); } }
+  .step {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+    padding: 18px; box-shadow: var(--shadow);
+  }
+  .step p { margin: 0; font-size: .95rem; color: var(--muted); }
+
+  .figures { display: grid; gap: 16px; margin: 24px 0; }
+  @media (min-width: 640px) { .figures { grid-template-columns: repeat(4, 1fr); } }
+  .fig {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 6px; padding: 16px; box-shadow: var(--shadow);
+  }
+  .fig .n {
+    font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums;
+    font-size: 1.65rem; font-weight: 500; letter-spacing: -.02em; display: block;
+  }
+  .fig .k { font-size: .8rem; color: var(--muted); }
+  .fig.hero .n { color: var(--accent); }
+
+  table { border-collapse: collapse; width: 100%; margin: 20px 0; font-size: .94rem; }
+  th, td { text-align: left; padding: 9px 14px 9px 0; border-bottom: 1px solid var(--line); }
+  th { font-family: Archivo, sans-serif; font-size: .74rem; text-transform: uppercase;
+       letter-spacing: .1em; color: var(--muted); font-weight: 600; }
+  td.n { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; text-align: right; }
+
+  .note {
+    border-left: 2px solid var(--accent); padding: 2px 0 2px 18px;
+    margin: 22px 0; color: var(--muted); font-size: .96rem;
+  }
+  .limits { display: grid; gap: 14px; margin-top: 20px; }
+  .limit { border-top: 1px solid var(--line); padding-top: 14px; }
+  .limit p { margin: 0; color: var(--muted); font-size: .95rem; }
+  footer { border-top: 1px solid var(--line); padding-top: 28px; color: var(--muted); font-size: .9rem; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="label">Uniswap v4 hook</div>
+    <h1>Airbag</h1>
+    <p class="lede">Impact protection for limit orders. It pays a resting maker for the price
+      displacement caused by the swap that filled them — and, like a real airbag, it only deploys
+      on impact.</p>
+    <div class="meta">
+      <span>UHI10 Hookathon</span>
+      <span>oracle-free</span>
+      <span>no keeper</span>
+      <span>66 tests</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="col">
+      <div class="label">The problem</div>
+      <h2>A resting limit order is a free option written to the market</h2>
+      <p>You place an order: sell ETH at 1,866. It rests, waiting. A large trade arrives and does
+        not merely touch your price — it blows through and keeps going to 1,875.</p>
+      <p>You got your price. Formally, nothing went wrong. But the extra move was captured by
+        whoever ran through you, and it only existed because your order was sitting in the way.</p>
+    </div>
+
+    <figure>
+      <div class="scroller">
+        <svg viewBox="0 0 720 220" role="img" aria-label="A price path rising through a resting order and continuing past it; the region beyond the order is the displacement Airbag charges for.">
+          <defs>
+            <pattern id="hatch" width="7" height="7" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+              <line x1="0" y1="0" x2="0" y2="7" stroke="var(--accent)" stroke-width="2.5" opacity=".28"/>
+            </pattern>
+          </defs>
+
+          <g stroke="var(--line)" stroke-width="1">
+            <line x1="60" y1="30"  x2="700" y2="30"/>
+            <line x1="60" y1="66"  x2="700" y2="66"/>
+            <line x1="60" y1="102" x2="700" y2="102"/>
+            <line x1="60" y1="138" x2="700" y2="138"/>
+            <line x1="60" y1="174" x2="700" y2="174"/>
+          </g>
+          <g font-family="JetBrains Mono, monospace" font-size="10" fill="var(--muted)">
+            <text x="8" y="34">1875</text><text x="8" y="70">1872</text>
+            <text x="8" y="106">1869</text><text x="8" y="142">1866</text>
+            <text x="8" y="178">1863</text>
+          </g>
+
+          <rect x="60" y="128" width="640" height="20" fill="var(--accent-soft)"/>
+          <line x1="60" y1="138" x2="700" y2="138" stroke="var(--accent)" stroke-width="2"/>
+          <text x="66" y="122" font-family="Archivo, sans-serif" font-size="11" font-weight="600" fill="var(--accent)">your order rests here</text>
+
+          <rect x="330" y="30" width="370" height="108" fill="url(#hatch)"/>
+          <text x="344" y="24" font-family="Archivo, sans-serif" font-size="11" font-weight="600" fill="var(--accent)">displacement — what Airbag charges for</text>
+
+          <path d="M60 186 L150 178 L215 168 L280 150 L330 138 L385 96 L440 72 L520 48 L610 36 L700 32"
+                fill="none" stroke="var(--data)" stroke-width="2.5" stroke-linejoin="round"/>
+          <circle cx="330" cy="138" r="5" fill="var(--data)"/>
+          <text x="238" y="205" font-family="JetBrains Mono, monospace" font-size="10" fill="var(--muted)">you are filled here</text>
+          <text x="560" y="205" font-family="JetBrains Mono, monospace" font-size="10" fill="var(--muted)">the market ends up here</text>
+        </svg>
+      </div>
+      <figcaption>Crossing your own range is the fill, at the price you asked for. Only what lies
+        beyond the far edge is displacement — which is why the charge is measured from there and
+        not from your near tick.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <div class="col">
+      <div class="label">The mechanism</div>
+      <h2>Measured in the same transaction, from the pool's own tick</h2>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <h3>Measure</h3>
+        <p>How far past your price the fill pushed the market. One tick is one basis point, so it
+          is exact integer arithmetic — no price reconstruction, nothing to round.</p>
+      </div>
+      <div class="step">
+        <h3>Charge</h3>
+        <p>A capped share of the overshoot, taken from the swap that caused it, and only on the
+          part the pool fee did not already cover.</p>
+      </div>
+      <div class="step">
+        <h3>Credit</h3>
+        <p>To that specific maker's order, held as an ERC-721. Comparable designs pay the pool at
+          large; this pays the person who was run over.</p>
+      </div>
+    </div>
+    <div class="col">
+      <div class="note">Nothing is read at a later block. A future price is a value the filler
+        themselves could write, which is precisely why deferred settlement is not part of this
+        design.</div>
+      <h3>Why the threshold is the pool's own fee</h3>
+      <p>A maker filled by an ordinary swap already collected the fee on their own fill. Below that
+        line they are not out of pocket, so the hook stays silent. Benign flow pays nothing without
+        a special case existing for it — the threshold falls out of the measurement rather than
+        being tuned.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="col">
+      <div class="label">Evidence</div>
+      <h2>Is the overshoot worth collecting at all?</h2>
+      <p>Measured before any contract was written, over 30 days of Base WETH/USDC — 253,135 swap
+        events, ~11,400 simulated fills. The same median came out of three independent pools and
+        two time windows.</p>
+    </div>
+    <div class="figures">
+      <div class="fig hero"><span class="n">2.0</span><span class="k">bps median displacement — under the fee, so nothing is charged</span></div>
+      <div class="fig"><span class="n">22.5%</span><span class="k">of fills land in the tail</span></div>
+      <div class="fig"><span class="n">24</span><span class="k">bps mean displacement in that tail</span></div>
+      <div class="fig"><span class="n">3</span><span class="k">independent pools agreeing</span></div>
+    </div>
+    <div class="col">
+      <p>The median fill is not the product. The tail is.</p>
+      <h3>Then replayed through the contract itself</h3>
+      <p>48 hours of that same history, driven tick-for-tick through AirbagHook in a fork test, so
+        the number comes from the contract rather than from a model of it.</p>
+    </div>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Replaying real Base history</th><th class="n">Value</th></tr></thead>
+        <tbody>
+          <tr><td>Swaps replayed</td><td class="n">1,055</td></tr>
+          <tr><td>Orders filled</td><td class="n">611</td></tr>
+          <tr><td>Of which compensated</td><td class="n">280</td></tr>
+          <tr><td>Rebate, median</td><td class="n">3 bps</td></tr>
+          <tr><td>Rebate, p90</td><td class="n">48 bps</td></tr>
+          <tr><td>Rebate, maximum</td><td class="n">199 bps</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="col">
+      <p>More than half of all fills cost the swapper nothing. That is the design working, not
+        failing. The maximum landing at 199 against a 200 bps cap is a useful sanity check: the
+        ceiling binds and nothing slips past it.</p>
+      <div class="note">Stated with the numbers rather than under them: this 48-hour window is
+        roughly three times more volatile than typical. The 30-day figures above remain the
+        representative ones.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="col">
+      <div class="label">Honesty</div>
+      <h2>Where it stops</h2>
+      <p>Two adversarial audits ran before anything was deployed. They raised 65 findings; 48
+        survived independent refutation, and eight were blockers. All eight are closed. The rest
+        are written down rather than quietly left.</p>
+    </div>
+    <div class="col limits">
+      <div class="limit">
+        <h3>Size guards read instantaneous liquidity</h3>
+        <p>Manipulable by adding liquidity in the same transaction. Doing better needs a
+          time-weighted measure of depth, which cannot be read in-transaction without an oracle —
+          and being oracle-free is the point, not an accident. The damage is bounded elsewhere:
+          the charge can never exceed what the paying swap received.</p>
+      </div>
+      <div class="limit">
+        <h3>The block's fill list holds 32 orders</h3>
+        <p>Past that, a filler who saturates it can split their swap and escape the top-up. The
+          real fix keys on ticks rather than orders. Until then the overflow emits an event, so
+          the gap is observable from the first block rather than invisible.</p>
+      </div>
+      <div class="limit">
+        <h3>Truncation costs compensation, never principal</h3>
+        <p>A swap settles a bounded number of fills. Anything left is recoverable by anyone
+          through <code>settleFills</code> — but no swap is present at that point to charge, and
+          inventing a payer would be worse than admitting the gap.</p>
+      </div>
+      <div class="limit">
+        <h3>The maker was not robbed</h3>
+        <p>They got their limit price. Airbag returns the part of the move their own order made
+          possible. On a median fill the maker is already net positive and the hook correctly pays
+          nothing.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Built from scratch during the UHI10 Hookathon, 17 August – 3 September 2026.
+      Source, running build log and the full list of known limits:
+      <a href="https://github.com/impetus82/airbag-hook">github.com/impetus82/airbag-hook</a></p>
+  </footer>
+</div>

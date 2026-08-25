@@ -1,0 +1,148 @@
+:root {
+  --ground: #0B0F16;
+  --surface: #131924;
+  --surface-2: #1A2230;
+  --line: #232D3D;
+  --line-bright: #33415A;
+  --ink: #E9EDF4;
+  --muted: #8593A8;
+  --dim: #5D6A7E;
+  --accent: #F0A054;
+  --accent-dim: #7A5A32;
+  --accent-glow: rgba(240, 160, 84, .12);
+  --data: #58C0A8;
+  --warn: #E06A5C;
+  --r: 10px;
+}
+:root[data-theme="light"] {
+  --ground: #F5F6F8;
+  --surface: #FFFFFF;
+  --surface-2: #F0F2F5;
+  --line: #E2E6EC;
+  --line-bright: #C9D0DA;
+  --ink: #121822;
+  --muted: #5B6779;
+  --dim: #8B95A5;
+  --accent: #C2711F;
+  --accent-glow: rgba(194, 113, 31, .08);
+  --data: #1E7D68;
+  --warn: #C4483A;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--ground); color: var(--ink); }
+body {
+  font-family: Archivo, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px; line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+.mono, .num {
+  font-family: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em;
+}
+button { font: inherit; color: inherit; cursor: pointer; border: none; background: none; }
+input { font: inherit; color: inherit; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+.shell { max-width: 1180px; margin: 0 auto; padding: 0 24px 80px; }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; padding: 22px 0 26px; flex-wrap: wrap;
+}
+.brand { display: flex; align-items: baseline; gap: 12px; }
+.brand h1 { font-size: 1.3rem; font-weight: 700; letter-spacing: -.02em; }
+.brand span { font-size: .8rem; color: var(--muted); }
+
+.eyebrow {
+  font-size: .68rem; font-weight: 600; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent);
+}
+
+.btn {
+  background: var(--accent); color: #12161D; font-weight: 600; font-size: .88rem;
+  padding: 9px 16px; border-radius: 8px; transition: filter .15s, transform .05s;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .4; cursor: not-allowed; filter: none; transform: none; }
+.btn.ghost {
+  background: var(--surface-2); color: var(--ink);
+  border: 1px solid var(--line-bright); font-weight: 500;
+}
+
+.grid { display: grid; gap: 16px; }
+@media (min-width: 900px) { .grid.two { grid-template-columns: 1.15fr 1fr; align-items: start; } }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 20px;
+}
+.card h2 { font-size: .95rem; font-weight: 600; margin-bottom: 4px; }
+.card .sub { font-size: .82rem; color: var(--muted); margin-bottom: 16px; }
+
+.chainpick { display: flex; gap: 6px; background: var(--surface-2); padding: 4px; border-radius: 9px; }
+.chainpick button {
+  padding: 6px 14px; border-radius: 6px; font-size: .85rem; font-weight: 500;
+  color: var(--muted); transition: background .15s, color .15s;
+}
+.chainpick button[data-on="true"] { background: var(--surface); color: var(--ink); }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1px; background: var(--line); border-radius: 8px; overflow: hidden; }
+.stat { background: var(--surface); padding: 13px 15px; }
+.stat .k { font-size: .68rem; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+.stat .v { font-size: 1.12rem; margin-top: 3px; }
+.stat .v.accent { color: var(--accent); }
+
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: .78rem; color: var(--muted); margin-bottom: 6px; }
+.field .row { display: flex; gap: 8px; align-items: stretch; }
+.field input {
+  flex: 1; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 12px; font-family: "JetBrains Mono", monospace;
+  font-variant-numeric: tabular-nums; font-size: .9rem; min-width: 0;
+}
+.field input:focus { border-color: var(--line-bright); outline: none; }
+.hint { font-size: .75rem; color: var(--dim); margin-top: 6px; }
+.hint.warn { color: var(--warn); }
+
+.side { display: flex; gap: 8px; }
+.side button {
+  flex: 1; padding: 10px; border-radius: 8px; font-size: .85rem; font-weight: 500;
+  background: var(--surface-2); border: 1px solid var(--line); color: var(--muted);
+}
+.side button[data-on="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-glow); }
+
+.orders { display: flex; flex-direction: column; gap: 10px; }
+.order {
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 9px; padding: 14px;
+  display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.order .meta { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.order .id { font-size: .75rem; color: var(--dim); }
+.order .px { font-size: 1rem; }
+
+.pill {
+  font-size: .7rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid;
+}
+.pill.waiting { color: var(--muted); border-color: var(--line-bright); }
+.pill.filled { color: var(--data); border-color: color-mix(in srgb, var(--data) 40%, transparent); background: color-mix(in srgb, var(--data) 10%, transparent); }
+.pill.paid { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-glow); }
+
+.empty { text-align: center; padding: 34px 16px; color: var(--dim); font-size: .88rem; }
+
+.deployed {
+  border-left: 2px solid var(--accent); background: var(--accent-glow);
+  padding: 10px 14px; border-radius: 0 8px 8px 0; margin-top: 12px;
+}
+.deployed .k { font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.deployed .v { font-size: 1.05rem; margin-top: 2px; }
+
+footer { margin-top: 40px; padding-top: 22px; border-top: 1px solid var(--line); font-size: .82rem; color: var(--dim); }
+footer a { color: var(--muted); }
