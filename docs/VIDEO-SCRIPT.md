@@ -120,6 +120,10 @@ aloud once before recording, and wherever you stumble, change the wording rather
 - [ ] Микрофон гарнитуры, не встроенный в ноутбук
 - [ ] Крупный шрифт в терминале и в браузере — судья смотрит в небольшом окне
 - [ ] Полный прогон с таймером **до** чистовой записи
+- [ ] **Если прогон вышел длиннее 4:45** — режьте секцию «What was hard» до двух предложений:
+      «Two adversarial audit rounds ran before deployment, and the two worst bugs were mine, written
+      while fixing the first round. Three findings are open on purpose and written down.» Это
+      единственный блок, который судья и так прочтёт целиком в эссе Challenges
 - [ ] Итоговый файл ≤ 5:00 по факту, а не по замыслу
 
 ## Чем записывать
