@@ -47,6 +47,11 @@ correctly pays nothing; it matters in the tail.
 Both verified; addresses, pool ids and transactions in [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md).
 A hackathon deployment on dust-seeded pools — read the known limits first.
 
+## Try it
+
+**https://impetus82.github.io/airbag-hook/** — reads both live pools, places orders, shows the
+rebate on your own. Static: everything is client-side, so there is no backend to trust.
+
 ## Explainer
 
 A one-page walkthrough of the mechanism, the measured evidence, and the known limits:
