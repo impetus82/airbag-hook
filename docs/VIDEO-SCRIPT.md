@@ -5,8 +5,8 @@ the project is not judged at all, and is disqualified from Demo Day. Everything 
 
 **Narration is 545 words.** At 120 words a minute — a slow, careful pace — that is 4:16, and even
 with the live transaction it lands under 4:45. That margin is deliberate: the cap is the one thing
-here that cannot be argued with afterwards. Do not try to fill
-five minutes; a tight four beats a padded five.
+here that cannot be argued with afterwards. Do not try to fill five minutes — a tight four beats
+a padded five.
 
 Record in **English**. An accent is entirely normal in this cohort; reading too fast is not. Read it
 aloud once before recording, and wherever you stumble, change the wording rather than your delivery.
@@ -49,7 +49,7 @@ aloud once before recording, and wherever you stumble, change the wording rather
 > median maker was already made whole by the fee they earned. So Airbag charges nothing there. The
 > threshold is not a tuned constant — it is the pool's own fee.
 >
-> The problem is in the tail: twenty-two percent of fills, averaging twenty-four basis points. That
+> The problem is in the tail: twenty-two and a half percent of fills, averaging twenty-four basis points. That
 > tail is what this hook exists for.
 
 ## 1:35 – 2:15 · Live on mainnet
