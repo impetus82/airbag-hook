@@ -1,8 +1,10 @@
 # Known limits
 
 Written because a hook that quietly falls short is worse than one that says where it stops.
-Everything here was found by adversarial review before deployment, judged real, and deliberately
-not fixed — with the reason stated. None of it risks a maker's principal.
+Everything here is deliberately not fixed, with the reason stated, and none of it risks a maker's
+principal. Most of it came out of adversarial review before deployment; the last two sections are
+properties of the design rather than findings against it, and are here because a reader deserves
+to meet them in the documentation rather than in production.
 
 ## Size guards are measured against instantaneous liquidity
 
