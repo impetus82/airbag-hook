@@ -54,6 +54,30 @@ there is no swap present at that point to charge, and inventing a payer would be
 admitting the gap, so an order rescued this way is filled at its limit price with no displacement
 rebate.
 
+## The charge lands inside the swapper's slippage check
+
+v4 applies a hook's returned delta to the caller — `swapDelta = swapDelta - hookDelta`, under the
+comment *"the caller has to pay for (or receive) the hook's delta"* in `v4-core`'s `Hooks.sol`. So
+on an exact-input swap the charge comes out of what the swapper receives, and a router comparing
+the result against `amountOutMinimum` compares the **post-charge** amount.
+
+That is the right way round for safety. A swapper is never quietly shortchanged past the tolerance
+they set; the transaction reverts instead, which is what slippage protection is for.
+
+It is the wrong way round for distribution, and that is the honest cost of this design. A swap
+sized against a quote from a pool *without* the hook can revert here, and an aggregator quoting
+off-chain without simulating `afterSwap` will produce routes that fail. Failing routes get a pool
+deprioritised, and a deprioritised pool sees no flow — which is where the fee arithmetic already
+pointed from the other direction: a taker's effective cost through an Airbag pool is the pool fee
+*plus* the expected charge, so all else equal a router prefers the pool next door.
+
+There is no fix inside the hook, and it is worth being clear about why. The charge has to be
+visible to the swapper or it would be a silent tax — and being visible is exactly what makes it
+possible to route around. What is meant to close the gap is the other half of the mechanism: a
+maker who knows the tail will be compensated can quote tighter, so the pool competes on price
+rather than by concealing a cost. Whether that is enough to win routing at real depth is an open
+commercial question, not a solved one.
+
 ## Not supported, refused at the door
 
 Native-currency pools, dynamic-fee pools, and orders in pools this hook is not attached to are
