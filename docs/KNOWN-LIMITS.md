@@ -66,10 +66,15 @@ the result against `amountOutMinimum` compares the **post-charge** amount.
 That is the right way round for safety. A swapper is never quietly shortchanged past the tolerance
 they set; the transaction reverts instead, which is what slippage protection is for.
 
-It is the wrong way round for distribution, and that is the honest cost of this design. A swap
-sized against a quote from a pool *without* the hook can revert here, and an aggregator quoting
-off-chain without simulating `afterSwap` will produce routes that fail. Failing routes get a pool
-deprioritised, and a deprioritised pool sees no flow — which is where the fee arithmetic already
+**The canonical quoting path already accounts for it.** `BaseV4Quoter._swap` calls
+`poolManager.swap` for real inside an unlock and reverts with the result, so `beforeSwap` and
+`afterSwap` both run and the delta it reports is the post-charge one. A router quoting on-chain
+through the v4 Quoter sees the true number, and its slippage bound is therefore set against
+reality.
+
+What does not see it is a quote computed off-chain from pool state alone, which is how much of
+routing actually prices a hop. Those quotes come out too good, swaps sized against them can revert
+here, and failing routes get a pool deprioritised — which is where the fee arithmetic already
 pointed from the other direction: a taker's effective cost through an Airbag pool is the pool fee
 *plus* the expected charge, so all else equal a router prefers the pool next door.
 

@@ -112,3 +112,76 @@ The through-line: every one of these was silent. A test that never ran a case, a
 summed the wrong field, an address rejected before the network saw it, a stale constant nobody had
 re-read. None of them threw. The hard part of this project was not writing the mechanism — it was
 building the things that refuse to stay quiet when the mechanism is wrong.
+
+---
+
+# Progress Update 2 — due Monday 31 August
+
+Form: https://tally.so/r/wdMO5D · короткая, все ответы приватные (видит только команда Atrium).
+
+| поле | ответ |
+|---|---|
+| Project ID | `HK-UHI10-1033` |
+| Email | `egoshin_crypto@proton.me` |
+| Is your hook demoable? | **Yes** |
+| Working hook contract deployed locally? | **Yes** |
+| Test Coverage Level | **High coverage, including edge cases (80–100%)** |
+| Deployment script? | **Yes** |
+| Deployed to a testnet? | **Yes** — но см. оговорку ниже |
+| Can your hook be quoted by routers? | **Yes** |
+| Tested integration with a frontend? | **Yes** |
+
+## Оговорка к «deployed to a testnet»
+
+Мы деплоили **не в тестнет, а в мейннет** — Base и Unichain. Буквальный ответ «No» прочитается как
+«ещё не деплоил», что неправда и хуже по смыслу. Поэтому **Yes** плюс первая же строка апдейта
+снимает двусмысленность. Если предпочитаете буквальность — ответ «No» тоже защитим, но тогда
+оговорку в тексте надо оставить обязательно.
+
+## Основание для «Test Coverage 80–100%»
+
+Замерено `forge coverage`, по `src/` (скрипты деплоя в знаменатель не входят — это оснастка,
+не хук):
+
+| файл | % строк |
+|---|---|
+| `AirbagMath.sol` | 100.00% |
+| `AirbagOrders.sol` | 85.15% |
+| `AirbagHook.sol` | 56.86% |
+| **итого по `src/`** | **≈81%** |
+
+Низкая цифра у `AirbagHook.sol` — это десять неиспользуемых колбэков `IHooks`, которые существуют
+только чтобы ревертить `HookNotImplemented` (6 покрытых функций из 16 = ровно эти десять заглушек).
+Покрывать их означало бы тестировать, что revert ревертит.
+
+## Основание для «can be quoted by routers»
+
+`BaseV4Quoter._swap` вызывает настоящий `poolManager.swap` внутри unlock и ревертит результатом,
+поэтому `beforeSwap` и `afterSwap` отрабатывают, и котировка приходит **уже с вычтенным зарядом**.
+Ончейн-котировка через штатный v4 Quoter корректна. Оффчейн-котировка по состоянию пула — нет;
+это записано в `docs/KNOWN-LIMITS.md`.
+
+## Brief progress update
+
+> The hook has been live on Base and Unichain mainnet since 25 August — not testnet — both
+> verified, with a full place → cross → claim cycle run on each. Both recorded 70 bps of
+> displacement and paid 33.50 bps of the maker's notional, which is exactly what the charge rule
+> specifies, on two chains whose pairs sort opposite ways.
+>
+> Two adversarial audit rounds ran before deploying. Round one produced eight blockers. Round two
+> produced two criticals that I had introduced while fixing round one, both of which risked maker
+> principal — the more useful lesson being that the invariant which should have caught them was
+> summing the wrong field, so I repaired the detector before the defect. Three findings are open by
+> choice and written up in docs/KNOWN-LIMITS.md.
+>
+> No sponsor technology integrated: the design is deliberately oracle-free and keeper-free, so
+> there was nothing it needed that a partner supplies.
+>
+> Remaining: the demo video, and the submission itself.
+
+## General feedback (optional)
+
+> One small thing on this form: "Have you deployed to a testnet?" is Yes/No, and it cannot express
+> "deployed to mainnet". I answered Yes because No would read as "hasn't deployed yet", but a third
+> option — or "deployed to a testnet or mainnet" — would collect cleaner data from the projects
+> furthest along.
