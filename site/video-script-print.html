@@ -89,14 +89,33 @@
 
 <div class="warn">
   <b>Перед стартом:</b> на вкладке 2 вверху справа должно быть видно <code>0x8114…5e12</code>,
-  а не кнопку Connect. И прочитайте всё вслух один раз <b>с секундомером</b>: цель 4:30.
-  Вышло дольше 4:45 — выкидываете КАДР 6 целиком.
+  а не кнопку Connect.<br><br>
+  <b>Одно измерение решает всё.</b> Прочитайте вслух с секундомером <b>только Кадр 1</b> (78 слов).
+  <b>Уложились в 36 сек</b> — читаете весь сценарий, Кадр 6 включительно (≈4:43).
+  <b>Дольше 36 сек</b> — <b>выкидываете Кадр 6 целиком</b> (≈4:28 даже при очень медленном чтении).
+  Не читайте быстрее, чтобы влезть: превышение 5:00 снимает работу с судейства.
 </div>
 
 <div class="do"><b>Запись:</b> QuickTime → File → New Screen Recording → микрофон гарнитуры →
 весь экран → старт. <b>Первые 2 секунды молчите.</b></div>
 
-<h2>Кадр 1 · Проблема <span class="t">0:00–0:33</span></h2>
+<h2>Кадр 0 · Что это вообще <span class="t">0:00–0:09</span></h2>
+<div class="do"><b>Экран:</b> вкладка 1, самый верх — виден заголовок Airbag.
+  Говорите сразу, без паузы: это первое, что услышит судья.</div>
+
+<div class="say">
+  <div class="en">Airbag is a Uniswap v4 hook that pays limit-order makers for the price impact of the swap that filled them.</div>
+  <div class="ru">Э́йрбэг из э Ю́нисуоп ви-фор хук зэт пэйз ли́мит-о́рдэр мэ́йкэрз фор зэ прайс и́мпэкт ов зэ суоп зэт филд зэм.</div>
+  <div class="mn">Airbag — хук Uniswap v4, который платит поставщикам лимитных ордеров за ценовое воздействие того свопа, который их исполнил.</div>
+</div>
+
+<div class="say">
+  <div class="en">Here is the problem it solves.</div>
+  <div class="ru">Хиэр из зэ про́блем ит солвз.</div>
+  <div class="mn">Вот проблема, которую он решает.</div>
+</div>
+
+<h2>Кадр 1 · Проблема <span class="t">0:09–0:40</span></h2>
 <div class="do"><b>Экран:</b> вкладка 1 — <code>…/airbag-hook/explainer/</code>, <b>самый верх</b>.
   Видно заголовок Airbag и раздел THE PROBLEM. <b>Не листаете весь кадр.</b></div>
 
@@ -113,15 +132,15 @@
 </div>
 
 <div class="say">
-  <div class="en">You were filled at exactly the price you asked for, so formally nothing went wrong.</div>
-  <div class="ru">Ю уэр филд эт эгзэ́ктли зэ прайс ю аскт фор, соу фо́рмали на́сингг уэнт ронг.</div>
-  <div class="mn">Вас исполнили ровно по той цене, что вы просили — формально всё в порядке.</div>
+  <div class="en">You were filled at exactly the price you asked for. Formally, nothing went wrong.</div>
+  <div class="ru">Ю уэр филд эт эгзэ́ктли зэ прайс ю аскт фор. Фо́рмали, на́сингг уэнт ронг.</div>
+  <div class="mn">Вас исполнили ровно по той цене, что вы просили. Формально всё в порядке.</div>
 </div>
 
 <div class="say">
-  <div class="en">But that extra move existed only because your order was in the way, and somebody else kept all of it.</div>
-  <div class="ru">Бат зэт э́кстра мув эгзи́стид о́унли бико́з ёр о́рдэр уоз ин зэ уэ́й, энд са́мбади элс кэпт ол ов ит.</div>
-  <div class="mn">Но это лишнее движение существовало только потому, что ваш ордер стоял на пути — а забрал его кто-то другой.</div>
+  <div class="en">But that move existed only because your order was in the way, and somebody else kept it.</div>
+  <div class="ru">Бат зэт мув эгзи́стид о́унли бико́з ёр о́рдэр уоз ин зэ уэ́й, энд са́мбади элс кэпт ит.</div>
+  <div class="mn">Но это движение существовало только потому, что ваш ордер стоял на пути — а забрал его кто-то другой.</div>
 </div>
 
 <div class="say">
@@ -139,9 +158,9 @@
   «you are filled here» → «displacement — what Airbag charges for» → «the market ends up here».</div>
 
 <div class="say">
-  <div class="en">Airbag is a Uniswap v4 hook that gives that part back.</div>
-  <div class="ru">Э́йрбэг из э Ю́нисуоп ви-фор хук зэт гивз зэт парт бэк.</div>
-  <div class="mn">Airbag — это хук Uniswap v4, который возвращает эту часть обратно.</div>
+  <div class="en">So Airbag gives that part back.</div>
+  <div class="ru">Соу Э́йрбэг гивз зэт парт бэк.</div>
+  <div class="mn">Итак, Airbag возвращает эту часть обратно.</div>
 </div>
 
 <div class="say">
@@ -173,9 +192,9 @@
 </div>
 
 <div class="say">
-  <div class="en">Thirty days of Base WETH/USDC — two hundred fifty-three thousand swaps, eleven thousand reconstructed fills.</div>
-  <div class="ru">Сё́рти дэйз ов Бэйс уэс-ю-эс-ди-си — ту ха́ндрэд фи́фти-сри са́узэнд суопс, иле́вэн са́узэнд риконстра́ктид филз.</div>
-  <div class="mn">Тридцать дней WETH/USDC на Base — 253 тысячи свопов, 11 тысяч восстановленных исполнений.</div>
+  <div class="en">Thirty days of Base WETH/USDC: two hundred fifty-three thousand swaps.</div>
+  <div class="ru">Сё́рти дэйз ов Бэйс уэс-ю-эс-ди-си: ту ха́ндрэд фи́фти-сри са́узэнд суопс.</div>
+  <div class="mn">Тридцать дней WETH/USDC на Base: 253 тысячи свопов.</div>
 </div>
 
 <div class="say">
@@ -187,9 +206,9 @@
 <p class="beat">Пауза. Это главное число — дайте ему прозвучать.</p>
 
 <div class="say">
-  <div class="en">That is below the pool fee, which means the median maker was already made whole by the fee they earned.</div>
-  <div class="ru">Зэт из било́у зэ пул фи, уич минз зэ ми́диан мэ́йкэр уоз олрэ́ди мэйд хоул бай зэ фи зэй ёрнд.</div>
-  <div class="mn">Это ниже комиссии пула — значит медианный мейкер уже компенсирован комиссией, которую сам и заработал.</div>
+  <div class="en">That is below the pool fee — the median maker was already made whole by the fee they earned.</div>
+  <div class="ru">Зэт из било́у зэ пул фи — зэ ми́диан мэ́йкэр уоз олрэ́ди мэйд хоул бай зэ фи зэй ёрнд.</div>
+  <div class="mn">Это ниже комиссии пула — медианный мейкер уже компенсирован комиссией, которую сам и заработал.</div>
 </div>
 
 <div class="say">
@@ -263,18 +282,18 @@
 
 <h2>Кадр 6 · Что было тяжело <span class="t">3:05–3:50</span></h2>
 <div class="do"><b>Экран:</b> терминал — запускаете <code>forge test</code>, говорите поверх прогона.<br>
-  <b>Этот кадр выкидывается целиком, если репетиция вышла длиннее 4:45.</b></div>
+  <b>Выкидывается целиком, если Кадр 1 на репетиции занял больше 36 секунд.</b></div>
 
 <div class="say">
-  <div class="en">Two adversarial audit rounds ran before deployment. Round one found eight blockers.</div>
-  <div class="ru">Ту эдвэрсэ́риал о́дит раундз рэн бифо́р дипло́ймент. Раунд уан фаунд эйт бло́кэрз.</div>
-  <div class="mn">До деплоя прошло два состязательных аудита. Первый нашёл восемь блокеров.</div>
+  <div class="en">Two adversarial audit rounds ran before deployment, and eight blockers came out of the first.</div>
+  <div class="ru">Ту эдвэрсэ́риал о́дит раундз рэн бифо́р дипло́ймент, энд эйт бло́кэрз кэйм аут ов зэ фёрст.</div>
+  <div class="mn">До деплоя прошло два состязательных аудита, из первого вышло восемь блокеров.</div>
 </div>
 
 <div class="say">
-  <div class="en">Round two found two criticals — and both were mine, written while fixing round one.</div>
-  <div class="ru">Раунд ту фаунд ту кри́тикалз — энд боус уэр майн, ри́тэн уайл фи́ксинг раунд уан.</div>
-  <div class="mn">Второй нашёл два критикала — и оба были мои, написанные при починке первого.</div>
+  <div class="en">The second round found two criticals, and both were mine — written while fixing the first.</div>
+  <div class="ru">Зэ сэ́кэнд раунд фаунд ту кри́тикалз, энд боус уэр майн — ри́тэн уайл фи́ксинг зэ фёрст.</div>
+  <div class="mn">Второй нашёл два критикала, и оба были мои — написанные при починке первого.</div>
 </div>
 
 <div class="say">
@@ -305,9 +324,9 @@
 </div>
 
 <div class="say">
-  <div class="en">Whether paying the tail makes makers quote tighter at real volume is a hypothesis my data does not settle — I measured the size of the tail, not the response to it.</div>
-  <div class="ru">Уэ́зэр пэ́йинг зэ тэйл мэйкс мэ́йкэрз коут та́йтэр эт риал во́льюм из э хайпо́сэсис май дэ́йта даз нот сэтл — ай мэ́жэрд зэ сайз ов зэ тэйл, нот зэ риспо́нс ту ит.</div>
-  <div class="mn">Заставит ли оплата хвоста мейкеров котировать плотнее на реальных объёмах — гипотеза, которую мои данные не решают. Я измерил размер хвоста, а не реакцию на него.</div>
+  <div class="en">Whether paying the tail makes makers quote tighter at real volume is a hypothesis my data does not settle. I measured the tail, not the response to it.</div>
+  <div class="ru">Уэ́зэр пэ́йинг зэ тэйл мэйкс мэ́йкэрз коут та́йтэр эт риал во́льюм из э хайпо́сэсис май дэ́йта даз нот сэтл. Ай мэ́жэрд зэ тэйл, нот зэ риспо́нс ту ит.</div>
+  <div class="mn">Заставит ли оплата хвоста мейкеров котировать плотнее на реальных объёмах — гипотеза, которую мои данные не решают. Я измерил хвост, а не реакцию на него.</div>
 </div>
 
 <div class="say">
