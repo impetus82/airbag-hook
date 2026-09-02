@@ -74,7 +74,8 @@ rebate on your own. Static: everything is client-side, so there is no backend to
 ## Explainer
 
 A one-page walkthrough of the mechanism, the measured evidence, and the known limits:
-https://claude.ai/code/artifact/1ccfe6d2-3cb0-4284-a266-c75fd0de1512 (source in `site/`)
+
+**https://impetus82.github.io/airbag-hook/explainer/** — source in `site/index.html`.
 
 ## Known limits
 

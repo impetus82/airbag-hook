@@ -29,7 +29,7 @@
 ### Браузер — открыть заранее, в таком порядке слева направо
 | № | вкладка | адрес |
 |---|---|---|
-| 1 | Объяснительная страница | локальный файл `site/index.html` |
+| 1 | Объяснительная страница | https://impetus82.github.io/airbag-hook/explainer/ |
 | 2 | **Приложение** | https://impetus82.github.io/airbag-hook/ |
 | 3 | BaseScan — постановка | `basescan.org/tx/0x7fce3af9…` |
 | 4 | BaseScan — своп | `basescan.org/tx/0x46a3f13f…` |
@@ -275,11 +275,8 @@ https://basescan.org/tx/0x7fce3af9d3a92001ec85a613c6a865fe231a388c4f04631be82642
 https://basescan.org/tx/0x46a3f13febfad4ed45d4248afed118703329da9018b636060aff3f39de547af7
 https://basescan.org/tx/0x728e0aff7d4b77558b670cba2fd0351031d9582044b0f2b6c80045dab9419534
 https://uniscan.xyz/tx/0x9d5c36f3b0bdd647c6e96dc234bcebe082ad64e24cd49b2f58c2ab28e833e006
+https://impetus82.github.io/airbag-hook/explainer/
 https://github.com/impetus82/airbag-hook
 ```
 
-Объяснительная страница открывается из терминала:
 
-```bash
-open ~/projects/airbag-hook/site/index.html
-```
