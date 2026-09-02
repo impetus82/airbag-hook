@@ -8,6 +8,11 @@ broadcast/*/dry-run/
 .env.*
 !.env.example
 
+# Локальные конфиги редакторов и инструментов — у каждого свои
+.claude/
+.vscode/
+.idea/
+
 # OS
 .DS_Store
 
