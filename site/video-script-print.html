@@ -1,0 +1,338 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Airbag — сценарий видео для печати</title>
+<style>
+  @page { size: A4 landscape; margin: 9mm 10mm 8mm; }
+
+  :root { --ink:#000; --dim:#555; --pale:#777; --rule:#bbb; --hi:#d97706; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body {
+    font: 9.2pt/1.32 "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--ink); background:#fff;
+    columns: 2; column-gap: 11mm; column-rule: 0.5pt dashed var(--rule);
+  }
+
+  h1 { font-size: 15pt; margin: 0 0 1mm; letter-spacing:-.3px; }
+  .lede { font-size: 8pt; color: var(--dim); margin: 0 0 3mm; line-height:1.35; }
+  .lede b { color: var(--ink); }
+
+  h2 {
+    font-size: 10.5pt; margin: 4mm 0 1.6mm; padding: 1mm 0 .8mm;
+    border-top: 1.2pt solid var(--ink); border-bottom: .4pt solid var(--rule);
+    break-after: avoid; break-inside: avoid;
+  }
+  h2 .t { float: right; font-weight: 400; font-size: 9pt; color: var(--dim); }
+  h3 { font-size: 8.6pt; margin: 2.4mm 0 1mm; text-transform: uppercase;
+       letter-spacing:.5px; color: var(--dim); break-after: avoid; }
+
+  /* реплика: транскрипция — главная, английский — ориентир, смысл — подсказка */
+  .say { margin: 0 0 2.6mm; padding-left: 2.2mm; border-left: 1.6pt solid var(--hi);
+         break-inside: avoid; }
+  .en  { font-size: 7.6pt; color: var(--pale); line-height:1.25; margin-bottom:.5mm; }
+  .ru  { font-size: 10.4pt; font-weight: 600; line-height: 1.28; }
+  .mn  { font-size: 7.6pt; color: var(--dim); font-style: italic; line-height:1.25;
+         margin-top:.5mm; }
+
+  /* режиссёрская ремарка */
+  .do { background:#f2f2f2; border-left: 1.6pt solid var(--ink);
+        padding: 1.2mm 2mm; margin: 0 0 2.4mm; font-size: 8.2pt; line-height:1.3;
+        break-inside: avoid; }
+  .do b { text-transform: uppercase; font-size: 7.4pt; letter-spacing:.4px; }
+  .beat { font-size:8.2pt; font-weight:700; margin:0 0 2.4mm; }
+
+  ol, ul { margin: 0 0 2.4mm; padding-left: 4.5mm; }
+  li { margin-bottom: .9mm; font-size: 8.4pt; line-height:1.3; }
+
+  table { width:100%; border-collapse: collapse; font-size: 8pt; margin-bottom: 2.4mm;
+          break-inside: avoid; }
+  td, th { border-bottom: .4pt solid #ddd; padding: .7mm 1mm; text-align:left; vertical-align:top; }
+  th { font-size:7.4pt; text-transform:uppercase; letter-spacing:.4px; color:var(--dim); }
+  td.n { width: 5mm; color: var(--dim); }
+
+  code { font: 8pt "SF Mono", Menlo, monospace; background:#eee; padding:0 .8mm; }
+  .urls { font: 7pt "SF Mono", Menlo, monospace; line-height:1.45; word-break: break-all;
+          color:#333; }
+  .warn { border: 1.2pt solid var(--hi); padding: 1.4mm 2mm; margin-bottom:2.6mm;
+          font-size:8.3pt; line-height:1.3; break-inside: avoid; }
+</style>
+
+<h1>Airbag — сценарий видео</h1>
+<p class="lede">
+  Крупным читаете <b>вслух</b>. Серым сверху — английский, чтобы не потерять место.
+  Курсивом снизу — что вы этим говорите: без этого ударение встанет не туда.<br>
+  <b>th</b> в <i>the, that</i> = «з» · <b>th</b> в <i>thirty, nothing</i> = «с» · <b>w</b> = «у» губами трубочкой.
+  Акцент — норма, важна разборчивость.
+</p>
+
+<h2>Подготовка <span class="t">30 мин</span></h2>
+<h3>Железо</h3>
+<ol>
+  <li>Гарнитура, не микрофон ноутбука.</li>
+  <li>«Не беспокоить» → Пункт управления → Фокусирование.</li>
+  <li>Закрыть Telegram и почту. Телефон — беззвучный, экраном вниз.</li>
+  <li>Терминал: отдельное окно, шрифт крупный (⌘ +).</li>
+  <li>В терминале набрать, <b>не запуская</b>: <code>forge test</code></li>
+</ol>
+
+<h3>Семь вкладок, слева направо</h3>
+<table>
+  <tr><th>№</th><th>что</th></tr>
+  <tr><td class="n">1</td><td>Объяснительная страница (<code>site/index.html</code>)</td></tr>
+  <tr><td class="n">2</td><td><b>Приложение</b> — кошелёк подключён, сеть <b>Base</b></td></tr>
+  <tr><td class="n">3</td><td>BaseScan — постановка ордера</td></tr>
+  <tr><td class="n">4</td><td>BaseScan — своп</td></tr>
+  <tr><td class="n">5</td><td>BaseScan — клейм</td></tr>
+  <tr><td class="n">6</td><td>Uniscan — клейм на Unichain</td></tr>
+  <tr><td class="n">7</td><td>GitHub</td></tr>
+</table>
+
+<div class="warn">
+  <b>Перед стартом:</b> на вкладке 2 вверху справа должно быть видно <code>0x8114…5e12</code>,
+  а не кнопку Connect. И прочитайте всё вслух один раз <b>с секундомером</b>: цель 4:30.
+  Вышло дольше 4:45 — выкидываете КАДР 6 целиком.
+</div>
+
+<div class="do"><b>Запись:</b> QuickTime → File → New Screen Recording → микрофон гарнитуры →
+весь экран → старт. <b>Первые 2 секунды молчите.</b></div>
+
+<h2>Кадр 1 · Проблема <span class="t">0:00–0:33</span></h2>
+<div class="do"><b>Экран:</b> вкладка 1, верх страницы. Не листаете.</div>
+
+<div class="say">
+  <div class="en">You place a limit order: sell my ETH at eighteen sixty-six. It rests, waiting.</div>
+  <div class="ru">Ю плэйс э ли́мит о́рдэр: сэл май и-ти-э́йч эт эйти́н си́ксти-сикс. Ит рэстс, уэ́йтинг.</div>
+  <div class="mn">Вы ставите лимитный ордер: продать мой ETH по 1866. Он лежит и ждёт.</div>
+</div>
+
+<div class="say">
+  <div class="en">A large trade arrives, and it doesn't just touch your price — it shoves the market past it, to eighteen seventy-five.</div>
+  <div class="ru">Э лардж трэйд эра́йвз, энд ит да́знт джаст тач ёр прайс — ит шавз зэ ма́ркет паст ит, ту эйти́н сэ́вэнти-файв.</div>
+  <div class="mn">Приходит крупная сделка и не просто касается вашей цены — она проталкивает рынок дальше, до 1875.</div>
+</div>
+
+<div class="say">
+  <div class="en">You were filled at exactly the price you asked for, so formally nothing went wrong.</div>
+  <div class="ru">Ю уэр филд эт эгзэ́ктли зэ прайс ю аскт фор, соу фо́рмали на́сингг уэнт ронг.</div>
+  <div class="mn">Вас исполнили ровно по той цене, что вы просили — формально всё в порядке.</div>
+</div>
+
+<div class="say">
+  <div class="en">But that extra move existed only because your order was in the way, and somebody else kept all of it.</div>
+  <div class="ru">Бат зэт э́кстра мув эгзи́стид о́унли бико́з ёр о́рдэр уоз ин зэ уэ́й, энд са́мбади элс кэпт ол ов ит.</div>
+  <div class="mn">Но это лишнее движение существовало только потому, что ваш ордер стоял на пути — а забрал его кто-то другой.</div>
+</div>
+
+<div class="say">
+  <div class="en">A resting limit order is a free option written to the market.</div>
+  <div class="ru">Э рэ́стинг ли́мит о́рдэр из э фри о́пшн ри́тэн ту зэ ма́ркет.</div>
+  <div class="mn">Лежащий лимитный ордер — это бесплатный опцион, выписанный рынку.</div>
+</div>
+
+<p class="beat">Пауза 1 сек. Листаете страницу вниз, к схеме.</p>
+
+<h2>Кадр 2 · Что делает хук <span class="t">0:33–1:00</span></h2>
+<div class="do"><b>Экран:</b> схема с лесенкой тиков.<br>
+  <b>Действие:</b> курсором обведите оранжевый блок ордера, потом проведите вдоль красной стрелки.</div>
+
+<div class="say">
+  <div class="en">Airbag is a Uniswap v4 hook that gives that part back.</div>
+  <div class="ru">Э́йрбэг из э Ю́нисуоп ви-фор хук зэт гивз зэт парт бэк.</div>
+  <div class="mn">Airbag — это хук Uniswap v4, который возвращает эту часть обратно.</div>
+</div>
+
+<div class="say">
+  <div class="en">At fill time it measures how far past your price the swap pushed the market, charges that swap a capped share of the overshoot, and credits it to your order.</div>
+  <div class="ru">Эт фил тайм ит мэ́жэрз хау фар паст ёр прайс зэ суоп пушт зэ ма́ркет, ча́рджиз зэт суоп э кэпт шэр ов зэ о́увэршут, энд крэ́дитс ит ту ёр о́рдэр.</div>
+  <div class="mn">В момент исполнения он меряет, насколько далеко за вашу цену своп продвинул рынок, берёт с этого свопа ограниченную долю перелёта и записывает её на ваш ордер.</div>
+</div>
+
+<div class="say">
+  <div class="en">All inside the same transaction, from the pool's own tick.</div>
+  <div class="ru">Ол инса́йд зэ сэйм трэнзэ́кшн, фром зэ пулз оун тик.</div>
+  <div class="mn">Всё внутри той же транзакции, по собственному тику пула.</div>
+</div>
+
+<div class="say">
+  <div class="en">No oracle, no keeper, and nothing settled at a later block — a future price is a number the filler themselves could write.</div>
+  <div class="ru">Ноу о́ракл, ноу ки́пэр, энд на́сингг сэ́тлд эт э лэ́йтэр блок — э фью́чэр прайс из э на́мбэр зэ фи́лэр зэмсэ́лвз куд райт.</div>
+  <div class="mn">Ни оракула, ни кипера, и ничего не рассчитывается в следующем блоке — будущую цену может записать сам исполнитель.</div>
+</div>
+
+<h2>Кадр 3 · Замер <span class="t">1:00–1:35</span></h2>
+<div class="do"><b>Экран:</b> терминал.<br>
+  <b>Действие:</b> на первой фразе набираете <code>head -30 tools/fetch_fixture.py</code> и Enter.</div>
+
+<div class="say">
+  <div class="en">Before I wrote any Solidity, I measured.</div>
+  <div class="ru">Бифо́р ай роут э́ни Соли́дити, ай мэ́жэрд.</div>
+  <div class="mn">Прежде чем написать хоть строчку Solidity, я измерил.</div>
+</div>
+
+<div class="say">
+  <div class="en">Thirty days of Base WETH/USDC — two hundred fifty-three thousand swaps, eleven thousand reconstructed fills.</div>
+  <div class="ru">Сё́рти дэйз ов Бэйс уэс-ю-эс-ди-си — ту ха́ндрэд фи́фти-сри са́узэнд суопс, иле́вэн са́узэнд риконстра́ктид филз.</div>
+  <div class="mn">Тридцать дней WETH/USDC на Base — 253 тысячи свопов, 11 тысяч восстановленных исполнений.</div>
+</div>
+
+<div class="say">
+  <div class="en">The median displacement was two basis points.</div>
+  <div class="ru">Зэ ми́диан диспле́йсмент уоз ту бэ́йсис пойнтс.</div>
+  <div class="mn">Медианное смещение — два базисных пункта.</div>
+</div>
+
+<p class="beat">Пауза. Это главное число — дайте ему прозвучать.</p>
+
+<div class="say">
+  <div class="en">That is below the pool fee, which means the median maker was already made whole by the fee they earned.</div>
+  <div class="ru">Зэт из било́у зэ пул фи, уич минз зэ ми́диан мэ́йкэр уоз олрэ́ди мэйд хоул бай зэ фи зэй ёрнд.</div>
+  <div class="mn">Это ниже комиссии пула — значит медианный мейкер уже компенсирован комиссией, которую сам и заработал.</div>
+</div>
+
+<div class="say">
+  <div class="en">So Airbag charges nothing there. The threshold is not a tuned constant — it is the pool's own fee.</div>
+  <div class="ru">Соу Э́йрбэг ча́рджиз на́сингг зэр. Зэ срэ́шхоулд из нот э тьюнд ко́нстант — ит из зэ пулз оун фи.</div>
+  <div class="mn">Поэтому там Airbag не берёт ничего. Порог — не подобранная константа, а собственная комиссия пула.</div>
+</div>
+
+<div class="say">
+  <div class="en">The problem is in the tail: twenty-two and a half percent of fills, averaging twenty-four basis points. That tail is what this hook exists for.</div>
+  <div class="ru">Зэ про́блем из ин зэ тэйл: туэ́нти-ту энд э хаф пэрсэ́нт ов филз, э́вэриджинг туэ́нти-фор бэ́йсис пойнтс. Зэт тэйл из уот зис хук эгзи́стс фор.</div>
+  <div class="mn">Проблема в хвосте: 22.5% исполнений со средним 24 базисных пункта. Ради этого хвоста хук и существует.</div>
+</div>
+
+<h2>Кадр 4 · Живая транзакция <span class="t">1:35–2:15</span></h2>
+<div class="do"><b>Экран:</b> вкладка 2, сеть Base.<br>
+  <b>По шагам:</b> 1) говорите первую фразу · 2) жмёте <code>Min</code> · 3) <code>Approve WETH</code>
+  + подтверждение · 4) <code>Place order</code> + подтверждение · 5) <b>пока идёт транзакция —
+  говорите второй и третий абзац. Не молчите в камеру.</b></div>
+
+<div class="say">
+  <div class="en">This is live on Base and Unichain mainnet. Real pools, real money — dust, but real. I'll place an order now.</div>
+  <div class="ru">Зис из лайв он Бэйс энд Ю́ничейн мэ́йннет. Риал пулз, риал ма́ни — даст, бат риал. Айл плэйс эн о́рдэр нау.</div>
+  <div class="mn">Это работает в мейннете Base и Unichain. Настоящие пулы, настоящие деньги — пыль, но настоящая. Сейчас поставлю ордер.</div>
+</div>
+
+<div class="say">
+  <div class="en">One tick spacing of liquidity, and the order is an ERC-721 — because a rebate needs a specific recipient, and a token has one.</div>
+  <div class="ru">Уан тик спэ́йсинг ов лику́идити, энд зэ о́рдэр из эн и-ар-си сэ́вэн-туэ́нти-уа́н — бико́з э ри́бэйт нидз э списи́фик риси́пиент, энд э то́укэн хэз уан.</div>
+  <div class="mn">Один тик-спейсинг ликвидности, и ордер — это ERC-721. У возврата должен быть конкретный получатель, а у токена он есть.</div>
+</div>
+
+<div class="say">
+  <div class="en">Other designs return recaptured value to the pool at large: correct for a pool, useless to the person who got run over.</div>
+  <div class="ru">А́зэр диза́йнз рито́рн рикэ́пчерд вэ́лью ту зэ пул эт лардж: корэ́кт фор э пул, ю́услес ту зэ пё́рсн ху гот ран о́увэр.</div>
+  <div class="mn">Другие решения возвращают отобранную стоимость пулу целиком: правильно для пула и бесполезно для того, кого переехали.</div>
+</div>
+
+<p class="beat">Дождитесь ордера в блоке «Your orders». → вкладка 3.</p>
+
+<h2>Кадр 5 · Доказательство <span class="t">2:15–3:05</span></h2>
+<div class="do"><b>Экран:</b> BaseScan.<br>
+  <b>Действие:</b> переключаете вкладки по ходу первой фразы —
+  «Order placed» = вкл. 3, «A swap crossed it» = вкл. 4, «Then the claim» = вкл. 5.</div>
+
+<div class="say">
+  <div class="en">Here is a complete cycle that already ran on Base. Order placed. A swap crossed it and carried seventy basis points past it. Then the claim.</div>
+  <div class="ru">Хиэр из э компли́т сайкл зэт олрэ́ди рэн он Бэйс. О́рдэр плэйст. Э суоп крост ит энд кэ́рид сэ́вэнти бэ́йсис пойнтс паст ит. Зэн зэ клэйм.</div>
+  <div class="mn">Вот полный цикл, который уже прошёл на Base. Ордер поставлен. Своп пересёк его и ушёл на 70 базисных пунктов дальше. Затем — получение.</div>
+</div>
+
+<div class="say">
+  <div class="en">The rule: subtract the five basis point fee, charge what's left marginally — seventy percent of the first band, fifty beyond.</div>
+  <div class="ru">Зэ рул: сабтрэ́кт зэ файв бэ́йсис пойнт фи, чардж уотс лэфт ма́рджинали — сэ́вэнти пэрсэ́нт ов зэ фёрст бэнд, фи́фти бийо́нд.</div>
+  <div class="mn">Правило: вычесть комиссию в 5 базисных пунктов, с остатка взять по предельным ставкам — 70% с первой полосы, 50% дальше.</div>
+</div>
+
+<div class="say">
+  <div class="en">That is thirty-three point five basis points of the order's notional. It paid thirty-three point five. Not approximately.</div>
+  <div class="ru">Зэт из сё́рти-сри пойнт файв бэ́йсис пойнтс ов зэ о́рдэрз но́ушнал. Ит пэйд сё́рти-сри пойнт файв. Нот эпро́ксиматли.</div>
+  <div class="mn">Это 33.50 базисных пункта от номинала ордера. Он заплатил 33.50. Не приблизительно.</div>
+</div>
+
+<p class="beat">Пауза. → вкладка 6, Uniscan.</p>
+
+<div class="say">
+  <div class="en">Same cycle on Unichain, where the pair sorts the other way round. Same seventy. Same thirty-three point five.</div>
+  <div class="ru">Сэйм сайкл он Ю́ничейн, уэр зэ пэр сортс зи а́зэр уэй ра́унд. Сэйм сэ́вэнти. Сэйм сё́рти-сри пойнт файв.</div>
+  <div class="mn">Тот же цикл на Unichain, где пара сортируется в обратном порядке. Те же 70. Те же 33.50.</div>
+</div>
+
+<h2>Кадр 6 · Что было тяжело <span class="t">3:05–3:50</span></h2>
+<div class="do"><b>Экран:</b> терминал — запускаете <code>forge test</code>, говорите поверх прогона.<br>
+  <b>Этот кадр выкидывается целиком, если репетиция вышла длиннее 4:45.</b></div>
+
+<div class="say">
+  <div class="en">Two adversarial audit rounds ran before deployment. Round one found eight blockers.</div>
+  <div class="ru">Ту эдвэрсэ́риал о́дит раундз рэн бифо́р дипло́ймент. Раунд уан фаунд эйт бло́кэрз.</div>
+  <div class="mn">До деплоя прошло два состязательных аудита. Первый нашёл восемь блокеров.</div>
+</div>
+
+<div class="say">
+  <div class="en">Round two found two criticals — and both were mine, written while fixing round one.</div>
+  <div class="ru">Раунд ту фаунд ту кри́тикалз — энд боус уэр майн, ри́тэн уайл фи́ксинг раунд уан.</div>
+  <div class="mn">Второй нашёл два критикала — и оба были мои, написанные при починке первого.</div>
+</div>
+
+<div class="say">
+  <div class="en">One left the hook owing more than it held, which locks maker principal.</div>
+  <div class="ru">Уан лэфт зэ хук о́уинг мор зэн ит хэлд, уич локс мэ́йкэр при́нсипал.</div>
+  <div class="mn">Один оставлял хук должным больше, чем он держит — а это запирает капитал мейкера.</div>
+</div>
+
+<div class="say">
+  <div class="en">The invariant that should have caught it was summing the wrong field — so I fixed the detector first, and it caught the insolvency immediately.</div>
+  <div class="ru">Зэ инвэ́риант зэт шуд хэв кот ит уоз са́мминг зэ ронг филд — соу ай фикст зэ дитэ́ктор фёрст, энд ит кот зэ инсо́лвэнси имми́диатли.</div>
+  <div class="mn">Инвариант, который должен был это поймать, суммировал не то поле. Я сначала починил детектор — и он тут же поймал неплатёжеспособность.</div>
+</div>
+
+<div class="say">
+  <div class="en">Three findings are open on purpose and written down. Two honest limits here too: the pools hold dust, and the crossing swaps were mine.</div>
+  <div class="ru">Сри фа́йндингз ар о́упэн он пё́рпэс энд ри́тэн даун. Ту о́нест ли́митс хиэр ту: зэ пулз хоулд даст, энд зэ кро́синг суопс уэр майн.</div>
+  <div class="mn">Три находки открыты осознанно и записаны. И два честных ограничения: в пулах пыль, и пересекающие свопы были мои.</div>
+</div>
+
+<h2>Кадр 7 · Финал <span class="t">3:50–4:10</span></h2>
+<div class="do"><b>Экран:</b> вкладка 7, GitHub, README сверху. Не листаете.</div>
+
+<div class="say">
+  <div class="en">So: the mechanism is verified on mainnet to the basis point.</div>
+  <div class="ru">Соу: зэ мэ́канизм из вэ́рифайд он мэ́йннет ту зэ бэ́йсис пойнт.</div>
+  <div class="mn">Итак: механизм проверен в мейннете с точностью до базисного пункта.</div>
+</div>
+
+<div class="say">
+  <div class="en">Whether paying the tail makes makers quote tighter at real volume is a hypothesis my data does not settle — I measured the size of the tail, not the response to it.</div>
+  <div class="ru">Уэ́зэр пэ́йинг зэ тэйл мэйкс мэ́йкэрз коут та́йтэр эт риал во́льюм из э хайпо́сэсис май дэ́йта даз нот сэтл — ай мэ́жэрд зэ сайз ов зэ тэйл, нот зэ риспо́нс ту ит.</div>
+  <div class="mn">Заставит ли оплата хвоста мейкеров котировать плотнее на реальных объёмах — гипотеза, которую мои данные не решают. Я измерил размер хвоста, а не реакцию на него.</div>
+</div>
+
+<div class="say">
+  <div class="en">Everything is public: the contract, sixty-six tests, the measurement tool, the front end. Thank you for watching.</div>
+  <div class="ru">Э́врисингг из па́блик: зэ ко́нтракт, си́ксти-сикс тэстс, зэ мэ́жэрмэнт тул, зэ фронт энд. Сэнк ю фор уо́чинг.</div>
+  <div class="mn">Всё открыто: контракт, 66 тестов, инструмент замера, фронтенд. Спасибо за внимание.</div>
+</div>
+
+<p class="beat">Молчите 2 секунды. Стоп записи.</p>
+
+<h2>После записи</h2>
+<ol>
+  <li>Длина файла — <b>строго меньше 5:00</b>. Больше — перезапись без Кадра 6.</li>
+  <li>Послушать первые 20 секунд: не режет ли звук.</li>
+  <li>YouTube → загрузить → видимость <b>Unlisted</b> (по ссылке). <b>Не Private.</b></li>
+  <li>Дождаться конца обработки и <b>открыть ссылку в другом браузере</b>, где вы не залогинены.
+      Это единственная надёжная проверка.</li>
+  <li>Прислать ссылку — вставим в форму подачи.</li>
+</ol>
+
+<h3>Адреса вкладок</h3>
+<p class="urls">
+  impetus82.github.io/airbag-hook/<br>
+  basescan.org/tx/0x7fce3af9d3a92001ec85a613c6a865fe231a388c4f04631be8264230206f539b<br>
+  basescan.org/tx/0x46a3f13febfad4ed45d4248afed118703329da9018b636060aff3f39de547af7<br>
+  basescan.org/tx/0x728e0aff7d4b77558b670cba2fd0351031d9582044b0f2b6c80045dab9419534<br>
+  uniscan.xyz/tx/0x9d5c36f3b0bdd647c6e96dc234bcebe082ad64e24cd49b2f58c2ab28e833e006<br>
+  github.com/impetus82/airbag-hook<br>
+  <br>
+  open ~/projects/airbag-hook/site/index.html
+</p>
