@@ -63,9 +63,16 @@ To be precise about what this is and is not: it is a live deployment on Unichain
 **A — Yes, my project addresses the theme.**
 
 ## What are some of your project tags?
-```
-Limit Orders, MEV Protection, Fee Rebate Systems, Loss-Versus-Rebalancing, ERC-721 Positions, Oracle-Free Design, Price Impact Recapture
-```
+Не свободный ввод — выбор из готового списка. Отметить пять:
+
+**MEV** · **Order Type** · **LVR** · **Unichain** · **LP Fees**
+
+Не отмечать, хотя в списке есть и выглядит подходящим:
+- **Dynamic Fee** — хук *отвергает* пулы с динамической комиссией (см. KNOWN-LIMITS)
+- **Oracle** — отсутствие оракула это ключевое свойство дизайна
+- **Custom hooks**, **DEX** — верно, но подпадает любая работа хакатона
+- **Trading Rewards**, **Pool Native Incentivization** — у нас не программа поощрений,
+  а компенсация конкретному пострадавшему мейкеру
 
 ## GitHub Repo
 ```
