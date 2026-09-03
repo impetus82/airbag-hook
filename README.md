@@ -84,7 +84,15 @@ judged real, and deliberately left — with the reasoning written down. None ris
 
 ## Partner integrations
 
-None yet.
+**Unichain** — deployed and verified on Unichain mainnet, with a full place → cross → claim cycle
+run there: [place](https://uniscan.xyz/tx/0xdb369a2e59b935792025ea3c7df95df9856a1477aa2264fbf616cc23a84b60d6),
+[cross](https://uniscan.xyz/tx/0xd00b743f1e5de166c22c9662e32abb1cae73df84b04d083915599aba41f28174),
+[claim](https://uniscan.xyz/tx/0x9d5c36f3b0bdd647c6e96dc234bcebe082ad64e24cd49b2f58c2ab28e833e006).
+
+Stated precisely, because the distinction matters: that is a live deployment on Unichain, not the
+use of a Unichain-specific SDK — the same contract runs on Base. Nothing else is integrated. The
+design is deliberately oracle-free and keeper-free, so there is nothing it needs that a partner
+supplies, and USDC appearing as a pool token is not an integration with Circle.
 
 ## Status
 

@@ -49,11 +49,14 @@ Airbag is a Uniswap v4 hook that pays a resting limit-order maker for the price 
 В диалоге выбора файла — **Cmd+Shift+G**, вставить путь.
 
 ## Did you integrate with any of the following partners?
-Ничего не отмечаете.
+Отметить **только Unichain**. Circle — нет (USDC как токен пула это не интеграция с Circle),
+Chainlink — тем более нет, у нас принципиально отсутствует оракул.
 
 ## How did you integrate our partners, if any?
 ```
-None. The design is deliberately oracle-free and keeper-free, so there was nothing it needed that a partner supplies.
+Unichain: the hook is deployed and verified on Unichain mainnet at 0x82f8fF08608a4357a9BB12F7439b43453CF6C0C4, with a full place / cross / claim cycle run there — the mirror of the Base one, since the pair sorts the other way round on Unichain. Both chains measured 70 bps of displacement and paid 33.50 bps of the maker's notional.
+
+To be precise about what this is and is not: it is a live deployment on Unichain, not the use of a Unichain-specific SDK. The same contract runs on Base. No other partner technology is used — the design is deliberately oracle-free and keeper-free, so there was nothing it needed that a partner supplies.
 ```
 
 ## Does your project address the current Uniswap Hookathon theme?
