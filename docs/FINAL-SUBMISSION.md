@@ -150,6 +150,19 @@ The through-line: every one of these was silent. A test that never ran a case, a
 ## Do you plan to continue working on this or another Hook project after graduation
 **A — Yes :)**
 
+## We'd love to learn more about your future plans for your hook project. And what areas you'd like support with from Atrium or generally.
+```
+Next: the mechanism is verified to the basis point on mainnet, but on pools holding dust. What it has not met is depth — and the claim underneath it, that compensating the tail lets makers quote tighter, is a hypothesis my data does not settle. I measured the size of the tail across 253,135 swaps; I did not measure how makers respond to being paid for it. Testing that is worth more than any further feature.
+
+Where support would help, in order of how much it would change:
+
+Introductions to market makers or limit-order desks willing to rest orders behind the hook at a size that produces a real signal. That is the bottleneck. The contract is not.
+
+Router and aggregator contacts. The charge is taken from the swap's unspecified currency, so an on-chain quote through the v4 Quoter already includes it, while a quote computed off-chain from pool state does not — which means routes sized against the second kind can revert here. It is written up in docs/KNOWN-LIMITS.md. I would rather hear how routers actually treat that from routers than keep reasoning about it alone.
+
+A security audit before anything with size sits behind an immutable contract. Two adversarial review rounds ran before deployment and three findings are open by choice, with the reasoning written down — but that is not a substitute for an audit.
+```
+
 ## On a scale from 1-5, how would you rate your UHI experience?
 Ваша оценка.
 
