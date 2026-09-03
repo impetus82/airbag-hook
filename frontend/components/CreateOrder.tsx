@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useAccount, useReadContracts, useWriteContract } from "wagmi";
+import { useAccount, useReadContracts, useSwitchChain, useWriteContract } from "wagmi";
 import { airbagAbi } from "@/lib/abi";
 import { DEPLOYMENTS, SupportedChainId, alignTick, erc20Abi, stateViewAbi, tickToPrice } from "@/lib/contracts";
 
@@ -9,6 +9,7 @@ export function CreateOrder({ chainId }: { chainId: SupportedChainId }) {
   const d = DEPLOYMENTS[chainId];
   const { address, chainId: connected } = useAccount();
   const { writeContract, isPending } = useWriteContract();
+  const { switchChain, isPending: isSwitching } = useSwitchChain();
 
   const [side, setSide] = useState<"above" | "below">("above");
   const [offset, setOffset] = useState("10");
@@ -155,7 +156,22 @@ export function CreateOrder({ chainId }: { chainId: SupportedChainId }) {
       </div>
 
       {!address && <div className="hint" style={{ marginTop: 10 }}>Connect a wallet to place an order.</div>}
-      {wrongChain && <div className="hint warn" style={{ marginTop: 10 }}>Your wallet is on another network — switch to {d.label}.</div>}
+      {/* Telling someone to switch networks without offering the switch is a dead end: the wallet
+          holds the only button that can do it, and most people will read this as "broken" and
+          leave. wagmi asks the wallet directly, so it is one click from here. */}
+      {wrongChain && (
+        <div className="hint warn" style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span>Your wallet is on another network.</span>
+          <button
+            className="btn ghost"
+            style={{ padding: "6px 12px" }}
+            disabled={isSwitching}
+            onClick={() => switchChain({ chainId })}
+          >
+            {isSwitching ? "Switching…" : `Switch to ${d.label}`}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
