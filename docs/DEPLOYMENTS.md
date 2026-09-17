@@ -36,10 +36,19 @@ its address, and those bits are what the PoolManager checks before calling any c
 | hook | [`0x100d7855…0100C4`](https://basescan.org/address/0x100d7855adac79d90a75b7a89cf99a9f2b0100c4) | [`0x82f8fF08…C6C0C4`](https://uniscan.xyz/address/0x82f8ff08608a4357a9bb12f7439b43453cf6c0c4) |
 | pool id | `0xfa9bfd56…a6bfba67` | `0xbc9274f6…8b4dcbf5` |
 
-Deployed 25 August, verified, and still holding their seed. They are **immutable and carry both
-top-up defects** — the one-block window and the order-keyed ring — so nothing new should be pointed
-at them. They stay live as the record of what was submitted, and the proof-of-life cycles below ran
-against them.
+Deployed 25 August, verified. They are **immutable and carry both top-up defects** — the one-block
+window and the order-keyed ring — so nothing new should be pointed at them. They stay live as the
+record of what was submitted, and the proof-of-life cycles below ran against them.
+
+**Their seed was withdrawn on 17 September, and both pools now hold zero active liquidity.**
+`createOrder` reverts with `PoolHasNoLiquidity` when that is the case, so the easy path into a
+version known to be broken is closed.
+
+Closed, not recalled — and the difference is the point. These hooks are immutable and
+permissionless: anyone can add their own liquidity to these pools, or open a fresh pool against
+either hook, and the defects come back with them. A contract like this cannot be withdrawn from
+the chain. What can be done is to stop advertising it, stop funding it, and write down plainly that
+it is broken. All three are done.
 
 ## Seeded pools — the superseded deployment
 
