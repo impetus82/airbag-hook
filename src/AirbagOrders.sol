@@ -105,13 +105,29 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     ///      service I have shipped once before and do not intend to ship twice.
     uint256 internal constant MAX_FILL_SCAN = 64;
 
-    /// @dev How many of a POOL's recent fills stay revisitable.
+    /// @dev How many of a POOL's recently-touched TICKS stay revisitable.
     ///      Deliberately keyed on the pool rather than on the actor: the question a top-up
     ///      answers is "did the market end up further past this maker", and the market does not
     ///      care which address pushed it. Keying on tx.origin meant a second wallet bought a
     ///      discount, and simultaneously billed whoever happened to share an origin — a bundler,
     ///      a relayer, a 4337 bundle, a CoW solver — for a move they did not make.
-    uint256 internal constant MAX_RECENT_FILLS = 32;
+    ///
+    ///      Ticks, not orders, and that is the whole point. `MAX_FILLS_PER_SWAP` is 24 against a
+    ///      32-entry ring, so an order-keyed ring saturated in **two swaps** — cheap enough that
+    ///      a filler could crowd a maker out of reach and then split at leisure. Orders resting
+    ///      at one tick share a displacement base, so one entry covers all of them: a swap that
+    ///      fills twenty-four orders across three ticks now spends three slots, not twenty-four.
+    ///      Evicting someone means crossing 32 distinct ticks, which costs price, not dust.
+    uint256 internal constant MAX_RECENT_TICKS = 32;
+
+    /// @dev Orders per tick held for top-up. Bounds the inner walk; beyond it the tick is
+    ///      saturated and the overflow is emitted rather than silently dropped.
+    uint256 internal constant MAX_FILLS_PER_TICK = 8;
+
+    /// @dev Hard ceiling on orders revisited by one top-up, across every tick. Without it the
+    ///      nested walk is 32 x 8 and a single afterSwap could price 256 fills — the sort of
+    ///      unbounded work that turns a busy pool into a pool nobody can swap through.
+    uint256 internal constant MAX_TOPUP_WORK = 32;
 
     /// @dev How long a fill stays revisitable, in seconds.
     ///
@@ -147,29 +163,32 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     ///      starve a real maker of their fill. A floor makes a wall cost real capital.
     uint256 internal constant MIN_ORDER_SHARE_DIVISOR = 10_000;
 
-    /// @dev A pool's recent fills, so displacement added afterwards still reaches the makers
-    ///      already run over. Without this, clearing a maker by a hair and pushing the price the
-    ///      rest of the way in a second swap costs nothing, since the pool fee is proportional
-    ///      and splitting is therefore free.
-    ///
-    ///      `filledAt` and `id` share one slot on purpose: this is written on every fill, and an
-    ///      extra SSTORE there is paid by every maker forever. Order ids are sequential from 1,
-    ///      so uint192 cannot be reached.
-    struct RecentFill {
+    /// @dev The orders filled at one tick, recently. `filledAt` dates the whole list: once it is
+    ///      older than the window the list is treated as empty and reused, so nothing has to be
+    ///      cleared on a timer.
+    struct TickFills {
         uint64 filledAt;
-        uint192 id;
+        uint16 count;
+        uint256[8] ids;
     }
 
-    /// @dev A ring, not a list. The old shape reset a counter whenever the block changed, which
-    ///      is exactly what made the window one block wide. Writing circularly means the oldest
-    ///      entry is overwritten in place: no eviction pass on the hot path, and the walk can
-    ///      stop early because entries are written in non-decreasing time order.
-    struct RecentFills {
+    /// @dev One ring entry: a tick, and when it was last filled into. Both in one slot.
+    struct RecentTick {
+        uint64 filledAt;
+        int24 tick;
+    }
+
+    /// @dev A ring, not a list. The original shape reset a counter whenever the block changed,
+    ///      which is exactly what made the window one block wide. Writing circularly means the
+    ///      oldest entry is overwritten in place: no eviction pass on the hot path, and the walk
+    ///      stops early because entries go in in non-decreasing time order.
+    struct RecentTicks {
         uint16 cursor;
-        RecentFill[32] entries;
+        RecentTick[32] entries;
     }
 
-    mapping(PoolId => RecentFills) private _recentFills;
+    mapping(PoolId => RecentTicks) private _recentTicks;
+    mapping(PoolId => mapping(int24 => TickFills)) private _tickFills;
 
     IPoolManager internal immutable _manager;
     uint256 public nextOrderId = 1;
@@ -205,9 +224,17 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     event RebateCredited(uint256 indexed orderId, bool inCurrency0, uint256 amount, uint256 displacementBps);
     event FillScanTruncated(PoolId indexed poolId, int24 reachedTick);
     event FillsDeferred(PoolId indexed poolId, int24 atTick);
-    /// @dev A still-toppable fill was pushed out of the ring by newer ones. Capacity pressure,
-    ///      not routine recycling: the entry it replaced was inside the window and unclaimed.
-    event RecentFillEvicted(PoolId indexed poolId, uint256 orderId);
+    /// @dev A tick still inside the window was pushed out of the ring by newer ones. Capacity
+    ///      pressure, not routine recycling.
+    event RecentTickEvicted(PoolId indexed poolId, int24 tick);
+
+    /// @dev More than MAX_FILLS_PER_TICK orders filled at one tick inside the window; this one is
+    ///      not revisitable by a top-up.
+    event TickFillsSaturated(PoolId indexed poolId, int24 tick, uint256 orderId);
+
+    /// @dev A top-up ran out of work budget before reaching every maker owed one. Bounded gas is
+    ///      not optional; leaving the truncation silent would be.
+    event TopUpTruncated(PoolId indexed poolId, int24 postTick);
 
     constructor(IPoolManager manager_) ERC721("Airbag Limit Order", "AIRBAG") {
         _manager = manager_;
@@ -544,7 +571,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
             emit OrderFilled(id, poolId, tick, postTick);
             subtotal += _priceFill(o, id, ctx, tick, postTick, o.paidDisplacement);
             _bankProceeds(ctx, o, id, tick);
-            _rememberFill(poolId, id);
+            _rememberFill(poolId, tick, id);
 
             uint256 last = bucket.length - 1;
             if (i != last) {
@@ -650,56 +677,112 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         internal
         returns (uint256 total)
     {
-        RecentFills storage rf = _recentFills[poolId];
-        uint256 cursor = rf.cursor;
+        RecentTicks storage rt = _recentTicks[poolId];
         uint64 cutoff =
             block.timestamp > TOPUP_WINDOW_SECONDS ? uint64(block.timestamp - TOPUP_WINDOW_SECONDS) : 0;
+        uint256 head = (uint256(rt.cursor) + MAX_RECENT_TICKS - 1) % MAX_RECENT_TICKS;
 
-        // Newest first. Entries are written in non-decreasing time order, so the first one that
-        // falls outside the window means every remaining one does too — the walk costs what the
-        // window actually holds, not what the ring could hold.
-        for (uint256 k; k < MAX_RECENT_FILLS; ++k) {
-            if (ctx.payBudget == 0) break; // nothing left to charge with; _priceFill would no-op
-            uint256 idx = (cursor + MAX_RECENT_FILLS - 1 - k) % MAX_RECENT_FILLS;
-            RecentFill storage e = rf.entries[idx];
-            if (e.filledAt == 0) break; // ring not yet wrapped: nothing older was ever written
-            if (e.filledAt < cutoff) break;
+        // Pass one, cheap: how many entries are still inside the window. Entries go in in
+        // non-decreasing time order, so the first stale one ends the count.
+        uint256 live;
+        while (live < MAX_RECENT_TICKS) {
+            RecentTick storage probe = rt.entries[(head + MAX_RECENT_TICKS - live) % MAX_RECENT_TICKS];
+            if (probe.filledAt == 0 || probe.filledAt < cutoff) break;
+            unchecked {
+                ++live;
+            }
+        }
+        if (live == 0) return 0;
 
-            uint256 id = uint256(e.id);
-            Order storage o = orders[id];
-            if (!o.filled) continue; // claimed since
-            uint256 base = AirbagMath.displacementBps(o.zeroForOne, o.tickLower, ctx.spacing, preTick);
-            if (base < o.paidDisplacement) base = o.paidDisplacement;
-            total += _priceFill(o, id, ctx, o.tickLower, postTick, base);
+        // Pass two, OLDEST FIRST — and that direction is the whole of the second fix.
+        //
+        // `MAX_TOPUP_WORK` has to exist: the nested walk is 32 ticks by 8 orders, and an
+        // afterSwap that prices 256 fills is the sort of unbounded work that makes a busy pool
+        // unswappable. But a bounded budget spent newest-first starves the oldest, which simply
+        // moves the eviction from the ring into the budget — the crowding detector caught exactly
+        // that and kept failing after the ring was fixed.
+        //
+        // Oldest first is the principled order: a maker filled twenty-nine seconds ago is about
+        // to leave the window and has no further chances, while one filled a second ago has the
+        // rest of it. Spend the last chance on whoever is running out of them.
+        uint256 work;
+        uint256 start = (head + MAX_RECENT_TICKS + 1 - live) % MAX_RECENT_TICKS;
+        for (uint256 k; k < live; ++k) {
+            if (ctx.payBudget == 0) break;
+            if (work >= MAX_TOPUP_WORK) {
+                emit TopUpTruncated(poolId, postTick);
+                break;
+            }
+            RecentTick storage e = rt.entries[(start + k) % MAX_RECENT_TICKS];
+            TickFills storage tf = _tickFills[poolId][e.tick];
+            if (tf.filledAt < cutoff) continue; // the tick's own list aged out first
+
+            uint256 n = tf.count;
+            for (uint256 m; m < n; ++m) {
+                if (ctx.payBudget == 0 || work >= MAX_TOPUP_WORK) break;
+                uint256 id = tf.ids[m];
+                Order storage o = orders[id];
+                if (!o.filled) continue; // claimed since
+                unchecked {
+                    ++work;
+                }
+                uint256 base = AirbagMath.displacementBps(o.zeroForOne, o.tickLower, ctx.spacing, preTick);
+                if (base < o.paidDisplacement) base = o.paidDisplacement;
+                total += _priceFill(o, id, ctx, o.tickLower, postTick, base);
+            }
         }
     }
 
-    function _rememberFill(PoolId poolId, uint256 id) private {
-        RecentFills storage rf = _recentFills[poolId];
-        uint256 slot = rf.cursor % MAX_RECENT_FILLS;
-        RecentFill storage victim = rf.entries[slot];
+    /// @dev Record a fill so a later swap can still reach its maker. Two writes, and the split
+    ///      between them is the fix: the order goes on its tick's short list, and the TICK — not
+    ///      the order — takes a slot in the ring.
+    function _rememberFill(PoolId poolId, int24 tick, uint256 id) private {
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 cutoff = block.timestamp > TOPUP_WINDOW_SECONDS ? uint64(block.timestamp - TOPUP_WINDOW_SECONDS) : 0;
 
-        // KNOWN LIMIT, deliberately observable rather than silent. The ring holds a bounded number
-        // of fills, so a filler who saturates it can push a maker out of reach and then split. The
-        // event fires only when the entry being overwritten was still inside the window — that is
-        // genuine capacity pressure, not the ordinary recycling of a stale slot.
-        //
-        // Raising the constant does not fix it: the number of fills in a window is unbounded. The
-        // real fix is to remember the TICKS touched rather than the orders, since orders at a tick
-        // share a base, and that is a restructure rather than a patch. Still open, still written
-        // down, and now monitorable with a signal that means something.
-        if (
-            victim.filledAt != 0
-                && block.timestamp <= uint256(victim.filledAt) + TOPUP_WINDOW_SECONDS
-                && orders[uint256(victim.id)].filled
-        ) {
-            emit RecentFillEvicted(poolId, uint256(victim.id));
+        TickFills storage tf = _tickFills[poolId][tick];
+        bool stale = tf.filledAt < cutoff; // also true for a tick never written: filledAt is 0
+        if (stale) tf.count = 0;
+
+        uint256 n = tf.count;
+        if (n < MAX_FILLS_PER_TICK) {
+            tf.ids[n] = id;
+            unchecked {
+                tf.count = uint16(n + 1);
+            }
+        } else {
+            // KNOWN LIMIT, deliberately observable. More than eight fills at one tick inside the
+            // window and the ninth is not revisitable. Orders here share a displacement base, so
+            // the ones already listed carry the same claim — what is lost is this order's own
+            // share, not the tick's protection.
+            emit TickFillsSaturated(poolId, tick, id);
+        }
+        tf.filledAt = nowTs;
+
+        // One ring slot per tick, not per order. Checking only the head is enough for the case
+        // that matters — `_fillBucket` settles a tick's orders consecutively, so a crowded tick
+        // collapses to a single entry. A tick re-touched by a later swap takes a fresh slot,
+        // which is correct: it is newer, and the walk is ordered by time.
+        RecentTicks storage rt = _recentTicks[poolId];
+        uint256 head = (uint256(rt.cursor) + MAX_RECENT_TICKS - 1) % MAX_RECENT_TICKS;
+        RecentTick storage newest = rt.entries[head];
+        if (newest.filledAt != 0 && newest.tick == tick && newest.filledAt >= cutoff) {
+            newest.filledAt = nowTs;
+            return;
         }
 
-        victim.filledAt = uint64(block.timestamp);
-        victim.id = uint192(id);
+        uint256 slot = rt.cursor % MAX_RECENT_TICKS;
+        RecentTick storage victim = rt.entries[slot];
+        if (victim.filledAt != 0 && victim.filledAt >= cutoff) {
+            // Capacity pressure, not routine recycling: the tick being overwritten was still
+            // inside the window. Evicting a live tick is what the order-keyed ring did in two
+            // swaps; it now costs 32 distinct ticks.
+            emit RecentTickEvicted(poolId, victim.tick);
+        }
+        victim.filledAt = nowTs;
+        victim.tick = tick;
         unchecked {
-            rf.cursor = uint16((slot + 1) % MAX_RECENT_FILLS);
+            rt.cursor = uint16((slot + 1) % MAX_RECENT_TICKS);
         }
     }
 

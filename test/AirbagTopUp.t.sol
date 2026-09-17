@@ -176,6 +176,68 @@ contract AirbagTopUpTest is Test, Deployers {
         assertGt(_rebate0(id), afterFirstLeg, "the single-block top-up is the behaviour that already existed");
     }
 
+    /// @dev THE SECOND DETECTOR — the ring's capacity, which the window fix did not touch.
+    ///
+    ///      The arithmetic is the whole argument: `MAX_FILLS_PER_SWAP` is 24 and the ring holds 32,
+    ///      so **two swaps saturate it**. That is not a thirty-two-transaction siege, it is two
+    ///      swaps — and the maker they push out stops being reachable by a top-up while the price
+    ///      is still moving past them.
+    ///
+    ///      Keyed on orders this is unavoidable. Keyed on the TICKS touched it mostly goes away:
+    ///      a swap that fills twenty-four orders resting at three ticks writes three entries
+    ///      instead of twenty-four, because orders at one tick share a displacement base.
+    function test_crowdingTheRingEvictsAMakerFromTopUpReach() public {
+        (uint256 victim, int24 victimLower) = _place(2, 1e18);
+        int24 victimEdge = victimLower + key.tickSpacing;
+
+        _pushTo(victimEdge + FIRST_LEG_BPS);
+        assertTrue(hook.orderOf(victim).filled, "victim must be filled before the crowd arrives");
+
+        // 36 fills after the victim — comfortably more than the 32-entry ring. Four to a tick so
+        // no single tick trips TickTooCrowded, nine ticks so one swap's 64-tick scan covers them.
+        uint256[] memory crowd = new uint256[](36);
+        uint256 w;
+        int24 highest;
+        int24 lowest = type(int24).max;
+        for (int24 t = 3; t < 12; ++t) {
+            for (uint256 n; n < 4; ++n) {
+                (uint256 cid, int24 cl) = _place(t, 1e18);
+                crowd[w++] = cid;
+                if (cl > highest) highest = cl;
+                if (cl < lowest) lowest = cl;
+            }
+        }
+
+        // Climb in stages. A swap settles at most MAX_FILLS_PER_SWAP orders and the walk is
+        // anchored at the market, so anything left behind by a budget-truncated swap is not
+        // revisited by the next one — it has to be crossed fresh. Three ticks a step keeps each
+        // swap at twelve fills, well inside the budget.
+        int24 clear = highest + 2 * key.tickSpacing;
+        for (int24 step = lowest + 3 * key.tickSpacing; step <= clear; step += 3 * key.tickSpacing) {
+            _pushTo(step);
+        }
+        _pushTo(clear);
+
+        uint256 filled;
+        for (uint256 i; i < crowd.length; ++i) {
+            if (hook.orderOf(crowd[i]).filled) ++filled;
+        }
+        assertGe(filled, 32, "the crowd must actually fill, or the ring was never wrapped");
+
+        uint256 beforeFinalPush = _rebate0(victim);
+
+        // One more push, still inside the window. The victim is no longer in the ring.
+        _nextBlock();
+        _pushTo(clear + 40);
+
+        assertGt(
+            _rebate0(victim),
+            beforeFinalPush,
+            "a maker crowded out of the ring stops being topped up while the price is still "
+            "moving past them"
+        );
+    }
+
     /// @dev Splitting must not be cheaper than not splitting. This is the property the whole
     ///      mechanism exists for, stated directly: two legs across a boundary owe what one leg
     ///      covering the same distance owes.

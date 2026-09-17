@@ -1079,13 +1079,56 @@ invariants still hold.
 
 70 tests, 0 failures.
 
+### Then the ring, the same evening
+
+The capacity limit was the other half of the judge's note, and the arithmetic made it urgent rather
+than theoretical: `MAX_FILLS_PER_SWAP` is 24 against 32 ring slots, so **two swaps saturated it**.
+Not a thirty-two-transaction siege — two swaps, and the maker they displaced was out of reach for
+good.
+
+Detector first again. Crowd 36 fills in behind a victim, push once more: the victim's rebate did
+not move by a single wei.
+
+Writing that detector took three tries, and the failures were the interesting part. The first
+version passed, because the crowd never filled — one swap settles at most 24 orders. The second
+failed on its own assertion at 24 of 36, because the walk is anchored at the market and a
+budget-truncated swap does not revisit what it left behind; the crowd had to be crossed in stages.
+A detector that passes for the wrong reason is worse than no detector, and it takes an assertion
+about the *setup* to notice.
+
+Then the fix: the ring holds **ticks**, each with a short list of the orders filled there. Orders
+at one tick share a displacement base, so a swap filling twenty-four orders across three ticks
+spends three slots instead of twenty-four. Eviction now costs 32 distinct ticks — price movement,
+not dust.
+
+### The fix had a bug, and the detector caught that too
+
+With the ring keyed on ticks the crowding test still failed, and for a new reason. The nested walk
+is 32 ticks by 8 orders, so I had bounded it at 32 orders of work — and spent that budget
+newest-first. Which starves the oldest. I had not fixed the eviction, I had moved it out of the
+ring and into the gas budget.
+
+Confirmed by raising the budget to 512 and watching the test pass, then putting it straight back.
+
+Oldest-first is the principled order, and the argument is short: a maker filled twenty-nine seconds
+ago is about to leave the window and has no further chances; one filled a second ago has the rest
+of it. Spend the last chance on whoever is running out of them. Finding the oldest in-window entry
+needs a cheap counting pass first, which is a fair price for not starving the people the mechanism
+exists to protect.
+
+Three bounds remain, all deliberate and all emitting: 32 ticks, 8 orders a tick,
+32 orders of work. Written up rather than claimed away.
+
+71 tests, 0 failures.
+
 ### What is not fixed
 
-The deployed hooks are immutable and predate this. **The live addresses still carry the bug.**
-Putting the fix on chain means a fresh deployment, and that is a decision rather than a task.
+The deployed hooks are immutable and predate all of this. **The live addresses still carry both
+bugs.** Putting the fixes on chain means a fresh deployment, which is a decision rather than a task.
 
-The ring's capacity limit also stands: 32 entries, and saturating it still buys an escape. The real
-answer there remains keying on ticks rather than orders, which is a restructure. Written down,
-still open, now with an event that fires only on genuine pressure.
+There is also one cheaper way to spend ring slots than crossing fresh ground: alternate between two
+ticks so each visit takes a new entry, because only the newest entry is checked for a repeat —
+scanning all 32 on every fill is a cost every maker would pay forever. It needs the price to
+oscillate *and* fresh orders at the tick each time. Documented, not hidden.
 
 ---
