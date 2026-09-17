@@ -1011,3 +1011,124 @@ contract deployment as the seed's `modify`. Every hash in this document is now r
 `cast tx` against the chain.
 
 ---
+
+## Day 24 — 17 Sep
+
+**The UHI10 result came back: 4.25 out of 5, no prize. And one real bug.**
+
+Scores: Original Idea 4, Unique Execution 4.5, Impact 4, Functionality 4.5, Presentation 4.5. The
+judge had clearly read the source rather than only watched the video — they named `_bankProceeds`
+removing the position inside the same `afterSwap`, the charge budget being spent inside `_markFills`
+rather than clamped afterwards, `invariant_claimsAreFullyBacked` holding the hook to that, and
+`test_replayHistory` sizing the tail against 48 hours of real swaps. Every one of those came out of
+the two audit rounds, which is a reasonable answer to whether that work was worth the time.
+
+Then the part worth more than the score.
+
+### The finding
+
+> `_topUpBlockFills` only revisits makers filled in the current block, so a filler who crosses an
+> order by a hair in one block and pushes the price the rest of the way in the next block pays for
+> the sliver and nothing more.
+
+Checked it before agreeing, and it is exactly right. `_topUpBlockFills` opened with
+`if (bf.blockNumber != uint64(block.number)) return 0;` and `_rememberFill` zeroed the count on a
+new block. Wait one block, finish the move, pay nothing.
+
+Wrote the detector first. It reproduced the escape and priced it: **174,772,660,917 wei** for the
+split versus **1,672,824,040,214** for the same distance in one swap. The maker was short **89.6%**.
+Not a gap — very nearly a total escape.
+
+### Why neither audit found it
+
+**No test in the suite had ever advanced the block number.** `vm.roll` and `vm.warp` appeared
+nowhere across fifteen files. The branch that asks whether a recorded fill belongs to the current
+block had no test that could take it the other way. It was not uncovered — it was *unreachable*,
+and an unreachable branch does not lower a coverage number, it hides behind one.
+
+That is the same shape as the exact-output critical in round two, where no test had ever passed a
+positive `amountSpecified`. Twice now the defect has been in the one case the harness could not
+express. The lesson is not "write more tests", it is **ask what your harness cannot say**.
+
+### The fix
+
+`BlockFills` becomes `RecentFills`: a 32-entry ring written circularly, each entry packing
+`filledAt` and `id` into one slot, walked newest-first and stopping at the first entry outside the
+window. Entries go in in non-decreasing time order, so that early stop is sound and the walk costs
+what the window holds rather than what the ring could.
+
+The window is measured in **seconds**, not blocks — the same bytecode runs on Base at 2s and
+Unichain at 1s, and a block count would quietly mean different things on each.
+
+Thirty seconds is a judgement, and the honest version of what it buys: **a long enough wait always
+escapes**. No finite window prevents that. What it removes is the *free* split — holding a
+half-finished move for thirty seconds carries price risk and invites someone else to take the
+opportunity first. Same bargain a TWAP offers.
+
+Widening the window is safe for a reason already in the code: each swap's base is
+`max(already paid, displacement at its own preTick)`, so a swap arriving twenty seconds later pays
+for the distance *it* moved and nothing more. It cannot inherit a stranger's move.
+
+### Then the detector again, one level up
+
+The invariant handler had six actions and not one of them moved the clock, so the strongest
+detector in the project — the one that caught the insolvency — could not reach the window either.
+Added `passTime`, spreading 1–45 seconds against a 30-second window so the fuzzer lands on both
+sides of the boundary. It now interleaves ~800 time jumps with swaps and fills; all three
+invariants still hold.
+
+70 tests, 0 failures.
+
+### Then the ring, the same evening
+
+The capacity limit was the other half of the judge's note, and the arithmetic made it urgent rather
+than theoretical: `MAX_FILLS_PER_SWAP` is 24 against 32 ring slots, so **two swaps saturated it**.
+Not a thirty-two-transaction siege — two swaps, and the maker they displaced was out of reach for
+good.
+
+Detector first again. Crowd 36 fills in behind a victim, push once more: the victim's rebate did
+not move by a single wei.
+
+Writing that detector took three tries, and the failures were the interesting part. The first
+version passed, because the crowd never filled — one swap settles at most 24 orders. The second
+failed on its own assertion at 24 of 36, because the walk is anchored at the market and a
+budget-truncated swap does not revisit what it left behind; the crowd had to be crossed in stages.
+A detector that passes for the wrong reason is worse than no detector, and it takes an assertion
+about the *setup* to notice.
+
+Then the fix: the ring holds **ticks**, each with a short list of the orders filled there. Orders
+at one tick share a displacement base, so a swap filling twenty-four orders across three ticks
+spends three slots instead of twenty-four. Eviction now costs 32 distinct ticks — price movement,
+not dust.
+
+### The fix had a bug, and the detector caught that too
+
+With the ring keyed on ticks the crowding test still failed, and for a new reason. The nested walk
+is 32 ticks by 8 orders, so I had bounded it at 32 orders of work — and spent that budget
+newest-first. Which starves the oldest. I had not fixed the eviction, I had moved it out of the
+ring and into the gas budget.
+
+Confirmed by raising the budget to 512 and watching the test pass, then putting it straight back.
+
+Oldest-first is the principled order, and the argument is short: a maker filled twenty-nine seconds
+ago is about to leave the window and has no further chances; one filled a second ago has the rest
+of it. Spend the last chance on whoever is running out of them. Finding the oldest in-window entry
+needs a cheap counting pass first, which is a fair price for not starving the people the mechanism
+exists to protect.
+
+Three bounds remain, all deliberate and all emitting: 32 ticks, 8 orders a tick,
+32 orders of work. Written up rather than claimed away.
+
+71 tests, 0 failures.
+
+### What is not fixed
+
+The deployed hooks are immutable and predate all of this. **The live addresses still carry both
+bugs.** Putting the fixes on chain means a fresh deployment, which is a decision rather than a task.
+
+There is also one cheaper way to spend ring slots than crossing fresh ground: alternate between two
+ticks so each visit takes a new entry, because only the newest entry is checked for a repeat —
+scanning all 32 on every fill is a cost every maker would pay forever. It needs the price to
+oscillate *and* fresh orders at the tick each time. Documented, not hidden.
+
+---
