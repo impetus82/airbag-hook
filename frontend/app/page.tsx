@@ -52,7 +52,7 @@ export default function Page() {
 
       <footer>
         A hackathon deployment on dust-seeded pools, from an immutable permissionless contract with
-        three audit findings deliberately left open and written down. Read{" "}
+        its limits written down rather than left to be discovered. Read{" "}
         <a href="https://github.com/impetus82/airbag-hook/blob/main/docs/KNOWN-LIMITS.md" target="_blank" rel="noreferrer">
           the known limits
         </a>{" "}
