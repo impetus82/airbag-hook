@@ -4,8 +4,8 @@ import { base, unichain } from "@/lib/chains";
 export const DEPLOYMENTS = {
   [base.id]: {
     label: "Base",
-    hook: "0x100d7855ADAC79D90A75B7A89Cf99A9f2B0100C4",
-    poolId: "0xfa9bfd56f6bea998f1d5f20ead8b36cc5fe813ed66460c567a6180eba6bfba67",
+    hook: "0xf328ff41720B6778d1610BB05a6CAB43D0CE40C4",
+    poolId: "0x2b6bb6900488d50e90d5ef3dfed1ff6f35205cdbcd767100dae54e8029a2b05a",
     stateView: "0xA3c0c9b65baD0b08107Aa264b0f3dB444b867A71",
     // The tokens sort differently on each chain — currency0 is WETH here, USDC on Unichain.
     currency0: { address: "0x4200000000000000000000000000000000000006", symbol: "WETH", decimals: 18 },
@@ -16,8 +16,8 @@ export const DEPLOYMENTS = {
   },
   [unichain.id]: {
     label: "Unichain",
-    hook: "0x82f8fF08608a4357a9BB12F7439b43453CF6C0C4",
-    poolId: "0xbc9274f6583561fd0e69fa1f9a133b2063fe0815e9ab53d6ff1e17c38b4dcbf5",
+    hook: "0xCeC392D5388BB110c4082011901BD9FEBC6f00C4",
+    poolId: "0x7db1fe33b9765ff48491d1a1670ab09d343144940cb2a7806bcb20dbea812f40",
     // EIP-55 checksummed, and it has to be: viem rejects a mis-cased address before it issues any
     // request. This one was wrong in two characters, so the panel read nothing on Unichain — with
     // no error, no console warning and nothing on the wire, because a rejected address never

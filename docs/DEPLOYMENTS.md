@@ -1,42 +1,47 @@
 # Live deployments
 
-Deployed 25 August 2026 from the final audited bytecode. Both addresses reproduced their
-prediction exactly — the deploy script asserts the match before initialising the pool, so a
-bytecode drift would have stopped the transaction rather than silently deploying something else.
+Deployed 17 September 2026 from the bytecode that carries both top-up fixes. Both addresses
+reproduced their prediction exactly — the deploy script asserts the match before initialising the
+pool, so a bytecode drift would have stopped the transaction rather than silently deploying
+something else. Both contracts are verified: the source on the explorer is the source here.
 
-Both contracts are verified: the source on the explorer is the source in this repository.
+| | Base (8453) | Unichain (130) |
+|---|---|---|
+| hook | [`0xf328ff41…CE40C4`](https://basescan.org/address/0xf328ff41720b6778d1610bb05a6cab43d0ce40c4) | [`0xCeC392D5…6f00C4`](https://uniscan.xyz/address/0xcec392d5388bb110c4082011901bd9febc6f00c4) |
+| pool id | `0x2b6bb690…29a2b05a` | `0x7db1fe33…ea812f40` |
+| pair | WETH / USDC, 0.05%, spacing 10 | USDC / WETH, 0.05%, spacing 10 |
+| currency0 | WETH | **USDC** — the tokens sort the other way here |
+| initial tick | −198250 (≈2,458 USDC per WETH) | +198250 |
+| deploy tx | [`0xbb2d0c0e…69c0fc`](https://basescan.org/tx/0xbb2d0c0e45e1c52dc00b796a3d367d518f0e58123e458cdbf907dd19e569c0fc) | [`0x25fb9c4d…5c97d5`](https://uniscan.xyz/tx/0x25fb9c4d8080837e8b3d91ac2c0f9d1735645fed88c266fe0b726ad3645c97d5) |
+| seed router | `0x03E970002dAdF53Aab0476b74E7810b1f41200Ea` | `0xEC4A0be5dB220D397C4E521879598251010e08eE` |
+| seed tx | [`0x1b7a1446…2ce608`](https://basescan.org/tx/0x1b7a14469e4df3b50ca13ec688b10b4943b248592559e8798356ad2d662ce608) | [`0x0c6d6c6b…f024c43`](https://uniscan.xyz/tx/0x0c6d6c6b841faad7e3425e4e9f080cd7a50af106e6dd5009aa1180dbbf024c43) |
+| seeded band | [−199450, −197050] | [197050, 199450] |
+| cost | 0.0000269 ETH | 0.0000026 ETH |
 
-## Base — chain 8453
+Both pools hold **40,000,000,000** units of liquidity, and both cost the same to seed —
+46,984,574,649,618 wei of WETH plus 115,478 units of USDC — because the bands are exact mirrors.
+An order runs from 4,000,000 to 400,000,000 liquidity units: at least 1 bp of pool depth, at most 1%.
 
-| | |
-|---|---|
-| hook | [`0x100d7855ADAC79D90A75B7A89Cf99A9f2B0100C4`](https://basescan.org/address/0x100d7855adac79d90a75b7a89cf99a9f2b0100c4) |
-| pool id | `0xfa9bfd56f6bea998f1d5f20ead8b36cc5fe813ed66460c567a6180eba6bfba67` |
-| pair | WETH / USDC, 0.05%, tick spacing 10 |
-| currency0 | WETH |
-| initial tick | −201000 (≈1866 USDC per WETH) |
-| deploy tx | [`0x56d8f0a8…83ceca`](https://basescan.org/tx/0x56d8f0a8baf8701d8f9095d44b83cb0c8e082bbd0ce914783c2ce6e02b83ceca) |
-| pool init tx | [`0x6106d881…49e931`](https://basescan.org/tx/0x6106d8813714a92c6a691b63d8dc5b760a17b67c7de34f05a7e42af90c49e931) |
-| cost | 0.0000223 ETH |
-
-## Unichain — chain 130
-
-| | |
-|---|---|
-| hook | [`0x82f8fF08608a4357a9BB12F7439b43453CF6C0C4`](https://uniscan.xyz/address/0x82f8ff08608a4357a9bb12f7439b43453cf6c0c4) |
-| pool id | `0xbc9274f6583561fd0e69fa1f9a133b2063fe0815e9ab53d6ff1e17c38b4dcbf5` |
-| pair | USDC / WETH, 0.05%, tick spacing 10 |
-| currency0 | **USDC** — the tokens sort the other way round here than on Base |
-| initial tick | +201000 |
-| deploy tx | [`0xbd47f706…e3a84b`](https://uniscan.xyz/tx/0xbd47f70642d7f7e0ad249e47d87cb40fb92f76ee6f14e592aa6b2e0417e3a84b) |
-| pool init tx | [`0x4156fc6b…635988`](https://uniscan.xyz/tx/0x4156fc6b24e61fb301d7564b8059e85bba32f789c9ab6522a0b4ea3d11635988) |
-| cost | 0.0000021 ETH |
+The pools were opened **at the market**, not at a constant. `INITIAL_TICK` is now a required input
+with sign, magnitude and alignment all checked before anything broadcasts — see the runbook for why
+that stopped being a constant.
 
 Both hook addresses end in `C4`. That is not decoration — a v4 hook's permissions are encoded in
-its address, and those bits are what the PoolManager checks before calling any callback. An
-address that does not end that way would not be this hook.
+its address, and those bits are what the PoolManager checks before calling any callback.
 
-## Seeded pools
+## The superseded deployment — what UHI10 was judged on
+
+| | Base | Unichain |
+|---|---|---|
+| hook | [`0x100d7855…0100C4`](https://basescan.org/address/0x100d7855adac79d90a75b7a89cf99a9f2b0100c4) | [`0x82f8fF08…C6C0C4`](https://uniscan.xyz/address/0x82f8ff08608a4357a9bb12f7439b43453cf6c0c4) |
+| pool id | `0xfa9bfd56…a6bfba67` | `0xbc9274f6…8b4dcbf5` |
+
+Deployed 25 August, verified, and still holding their seed. They are **immutable and carry both
+top-up defects** — the one-block window and the order-keyed ring — so nothing new should be pointed
+at them. They stay live as the record of what was submitted, and the proof-of-life cycles below ran
+against them.
+
+## Seeded pools — the superseded deployment
 
 Both pools carry **50,000,000,000 units of liquidity** across ±120 tick spacings around the
 initial price, confirmed on chain rather than from the broadcast log. Cost per chain: 0.0000674

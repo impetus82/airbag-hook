@@ -41,8 +41,11 @@ correctly pays nothing; it matters in the tail.
 
 | | Base | Unichain |
 |---|---|---|
-| hook | [`0x100d7855…0100C4`](https://basescan.org/address/0x100d7855adac79d90a75b7a89cf99a9f2b0100c4) | [`0x82f8fF08…C6C0C4`](https://uniscan.xyz/address/0x82f8ff08608a4357a9bb12f7439b43453cf6c0c4) |
+| hook | [`0xf328ff41…CE40C4`](https://basescan.org/address/0xf328ff41720b6778d1610bb05a6cab43d0ce40c4) | [`0xCeC392D5…6f00C4`](https://uniscan.xyz/address/0xcec392d5388bb110c4082011901bd9febc6f00c4) |
 | pair | WETH/USDC 0.05% | USDC/WETH 0.05% |
+
+Redeployed 17 September carrying both top-up fixes. The hooks UHI10 was judged on are still live
+and still carry the defects; they are listed, and labelled, in `docs/DEPLOYMENTS.md`.
 
 Both verified; addresses, pool ids and transactions in [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md).
 A hackathon deployment on dust-seeded pools — read the known limits first.
