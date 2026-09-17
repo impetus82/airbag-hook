@@ -24,11 +24,23 @@ import {AirbagConfig} from "./AirbagConfig.sol";
 contract DeployAirbag is Script {
     using StateLibrary for IPoolManager;
 
-    /// @dev A fresh pool has to start somewhere. Chosen to be close to the market so the first
-    ///      orders are placed against a sane price rather than an arbitrary one; the pool is a
-    ///      demonstration venue, not a claim about where WETH/USDC should trade.
-    int24 internal constant INITIAL_TICK_WETH_FIRST = -201000; // ~1866 USDC per WETH
-    int24 internal constant INITIAL_TICK_USDC_FIRST = 201000;
+    /// @dev A fresh pool has to start somewhere, and this used to be a constant. It read -201000,
+    ///      about 1,866 USDC per WETH, and it was still that on the day the market was near 2,460 —
+    ///      copied forward from a project a year older and checked by nobody. Both pools were born
+    ///      a quarter below the market, arbitrage walked them to the edge of the seeded band, and
+    ///      the demo was left with no liquidity to fill an order against.
+    ///
+    ///      So it is no longer a constant. INITIAL_TICK is required, has no default, and is
+    ///      checked for both sign and plausibility before anything is broadcast. A value nobody
+    ///      had to supply is a value nobody had to look at.
+    ///
+    ///      Read the market first — the canonical v3 WETH/USDC 0.05% pool on Base is the
+    ///      reference, and Unichain's tick is its negation because the pair sorts the other way:
+    ///
+    ///        cast call 0xd0b53D9277642d899DF5C87A3966A349A798F224 \
+    ///          "slot0()(uint160,int24,uint16,uint16,uint16,uint8,bool)" --rpc-url base
+    int24 internal constant TICK_SANITY_MIN = 150_000;
+    int24 internal constant TICK_SANITY_MAX = 250_000;
 
     function run() external {
         AirbagConfig.Deployment memory d = AirbagConfig.forChain(block.chainid);
@@ -43,14 +55,33 @@ contract DeployAirbag is Script {
         console2.log("chain         ", d.name);
         console2.log("predicted hook", predicted);
 
+        // Validate before broadcasting, not after. Everything below this line costs gas and is
+        // irreversible; everything above it is free to get wrong. The checks also have to be
+        // reachable without a private key, or they can only be exercised for real.
+        bool wethIsCurrency0 = uint160(AirbagConfig.WETH) < uint160(d.usdc);
+
+        int24 initialTick = int24(vm.envInt("INITIAL_TICK"));
+        // Sign follows the currency ordering: WETH first means the raw price is USDC per wei, so
+        // the tick is negative. Getting this backwards would open the pool at the reciprocal of
+        // the intended price, which is a 10^6-scale error, not a rounding one.
+        require(
+            wethIsCurrency0 ? initialTick < 0 : initialTick > 0,
+            "INITIAL_TICK has the wrong sign for this chain's currency ordering"
+        );
+        int24 magnitude = initialTick < 0 ? -initialTick : initialTick;
+        require(
+            magnitude >= TICK_SANITY_MIN && magnitude <= TICK_SANITY_MAX,
+            "INITIAL_TICK is outside any plausible WETH/USDC range - check it against the market"
+        );
+        require(initialTick % d.tickSpacing == 0, "INITIAL_TICK must be a multiple of the tick spacing");
+        console2.log("initial tick  ", initialTick);
+
         vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
 
         AirbagHook hook = new AirbagHook{salt: salt}(d.poolManager);
         require(address(hook) == predicted, "address drifted from the prediction");
 
         PoolKey memory key = AirbagConfig.poolKey(d, address(hook));
-        bool wethIsCurrency0 = uint160(AirbagConfig.WETH) < uint160(d.usdc);
-        int24 initialTick = wethIsCurrency0 ? INITIAL_TICK_WETH_FIRST : INITIAL_TICK_USDC_FIRST;
 
         d.poolManager.initialize(key, TickMath.getSqrtPriceAtTick(initialTick));
 
