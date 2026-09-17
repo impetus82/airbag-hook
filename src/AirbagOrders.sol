@@ -65,7 +65,8 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         uint128 rebate1; // Airbag credit owed in currency1
         uint128 owed0; // proceeds banked at the moment of the fill
         uint128 owed1;
-        uint64 filledBlock; // top-ups only ever apply within the block the fill happened in
+        uint64 filledBlock; // the block the fill landed in, for off-chain reconciliation;
+            // the top-up window itself is measured in seconds — see TOPUP_WINDOW_SECONDS
         bool filled;
         uint32 tickIndex; // slot in the tick's waiting list, for O(1) removal
         uint16 paidDisplacement; // bps of displacement already compensated, so top-ups only ever
@@ -104,13 +105,33 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     ///      service I have shipped once before and do not intend to ship twice.
     uint256 internal constant MAX_FILL_SCAN = 64;
 
-    /// @dev How many of a POOL's fills stay revisitable for the rest of the block.
+    /// @dev How many of a POOL's recent fills stay revisitable.
     ///      Deliberately keyed on the pool rather than on the actor: the question a top-up
     ///      answers is "did the market end up further past this maker", and the market does not
     ///      care which address pushed it. Keying on tx.origin meant a second wallet bought a
     ///      discount, and simultaneously billed whoever happened to share an origin — a bundler,
     ///      a relayer, a 4337 bundle, a CoW solver — for a move they did not make.
-    uint256 internal constant MAX_BLOCK_FILLS = 32;
+    uint256 internal constant MAX_RECENT_FILLS = 32;
+
+    /// @dev How long a fill stays revisitable, in seconds.
+    ///
+    ///      This used to be "the rest of the block", and that was the defect: crossing a maker by
+    ///      a hair, waiting one block, and finishing the move escaped the top-up entirely. The
+    ///      measured discount was **89.6%** — see `test_splittingAcrossBlocksIsNotCheaperThanOneSwap`.
+    ///      Reported by the UHI10 judge; neither audit round found it, because no test in the
+    ///      suite had ever advanced the block number, so the branch was unreachable rather than
+    ///      merely uncovered.
+    ///
+    ///      Seconds, not blocks, because the same bytecode runs on chains with different block
+    ///      times — 2s on Base, 1s on Unichain — and a window expressed in blocks would silently
+    ///      mean something different on each.
+    ///
+    ///      Thirty seconds is a judgement, and the honest statement of what it buys: **a long
+    ///      enough wait always escapes**. What the window removes is the *free* split. Holding a
+    ///      half-finished move across ~15 Base blocks carries price risk and invites anyone else
+    ///      to take the opportunity first, which is the same bargain a TWAP offers — beatable,
+    ///      but no longer beatable for nothing.
+    uint256 internal constant TOPUP_WINDOW_SECONDS = 30;
 
     /// @dev Ceiling on ORDERS settled in one swap, distinct from the tick budget above. Settling
     ///      a fill removes a position and takes tokens, so its cost is real; without a cap, a
@@ -126,17 +147,29 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     ///      starve a real maker of their fill. A floor makes a wall cost real capital.
     uint256 internal constant MIN_ORDER_SHARE_DIVISOR = 10_000;
 
-    /// @dev A pool's fills from the current block, so displacement added later in the same block
-    ///      still reaches the makers already run over. Without this, clearing a maker by a hair
-    ///      and pushing the price the rest of the way in a second swap costs nothing, since the
-    ///      pool fee is proportional and splitting is therefore free.
-    struct BlockFills {
-        uint64 blockNumber;
-        uint16 count;
-        uint256[32] ids;
+    /// @dev A pool's recent fills, so displacement added afterwards still reaches the makers
+    ///      already run over. Without this, clearing a maker by a hair and pushing the price the
+    ///      rest of the way in a second swap costs nothing, since the pool fee is proportional
+    ///      and splitting is therefore free.
+    ///
+    ///      `filledAt` and `id` share one slot on purpose: this is written on every fill, and an
+    ///      extra SSTORE there is paid by every maker forever. Order ids are sequential from 1,
+    ///      so uint192 cannot be reached.
+    struct RecentFill {
+        uint64 filledAt;
+        uint192 id;
     }
 
-    mapping(PoolId => BlockFills) private _blockFills;
+    /// @dev A ring, not a list. The old shape reset a counter whenever the block changed, which
+    ///      is exactly what made the window one block wide. Writing circularly means the oldest
+    ///      entry is overwritten in place: no eviction pass on the hot path, and the walk can
+    ///      stop early because entries are written in non-decreasing time order.
+    struct RecentFills {
+        uint16 cursor;
+        RecentFill[32] entries;
+    }
+
+    mapping(PoolId => RecentFills) private _recentFills;
 
     IPoolManager internal immutable _manager;
     uint256 public nextOrderId = 1;
@@ -172,7 +205,9 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     event RebateCredited(uint256 indexed orderId, bool inCurrency0, uint256 amount, uint256 displacementBps);
     event FillScanTruncated(PoolId indexed poolId, int24 reachedTick);
     event FillsDeferred(PoolId indexed poolId, int24 atTick);
-    event BlockFillOverflow(PoolId indexed poolId, uint256 orderId);
+    /// @dev A still-toppable fill was pushed out of the ring by newer ones. Capacity pressure,
+    ///      not routine recycling: the entry it replaced was inside the window and unclaimed.
+    event RecentFillEvicted(PoolId indexed poolId, uint256 orderId);
 
     constructor(IPoolManager manager_) ERC721("Airbag Limit Order", "AIRBAG") {
         _manager = manager_;
@@ -437,7 +472,7 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         returns (uint256 total)
     {
         if (postTick == preTick) return 0;
-        total = _topUpBlockFills(poolId, ctx, preTick, postTick);
+        total = _topUpRecentFills(poolId, ctx, preTick, postTick);
         int24 spacing = ctx.spacing;
         bool rising = postTick > preTick;
 
@@ -600,20 +635,37 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
         emit RebateCredited(id, ctx.chargeInCurrency0, amount, reached);
     }
 
-    /// @notice Charge for any further displacement added to makers already filled this block.
+    /// @notice Charge for any further displacement added to makers filled within the window.
     /// @dev The base is deliberately `max(already paid for, displacement at THIS swap's own
     ///      preTick)`. Without the second term a swap inherits the whole move that preceded it and
     ///      is billed for a price it did not set — which was not hypothetical: an unrelated swap
     ///      could be charged many times what the actual crosser paid, and one moving the price
     ///      back TOWARDS the maker could be charged at all.
-    function _topUpBlockFills(PoolId poolId, ChargeCtx memory ctx, int24 preTick, int24 postTick)
+    ///
+    ///      That second term is also what makes a window wider than one block defensible. A swap
+    ///      arriving twenty seconds after someone else's fill pays for the distance *it* moved the
+    ///      price and nothing more, so widening the window cannot make an unrelated swap inherit a
+    ///      stranger's move — it only stops the same move being cut in two.
+    function _topUpRecentFills(PoolId poolId, ChargeCtx memory ctx, int24 preTick, int24 postTick)
         internal
         returns (uint256 total)
     {
-        BlockFills storage bf = _blockFills[poolId];
-        if (bf.blockNumber != uint64(block.number)) return 0;
-        for (uint256 i; i < bf.count; ++i) {
-            uint256 id = bf.ids[i];
+        RecentFills storage rf = _recentFills[poolId];
+        uint256 cursor = rf.cursor;
+        uint64 cutoff =
+            block.timestamp > TOPUP_WINDOW_SECONDS ? uint64(block.timestamp - TOPUP_WINDOW_SECONDS) : 0;
+
+        // Newest first. Entries are written in non-decreasing time order, so the first one that
+        // falls outside the window means every remaining one does too — the walk costs what the
+        // window actually holds, not what the ring could hold.
+        for (uint256 k; k < MAX_RECENT_FILLS; ++k) {
+            if (ctx.payBudget == 0) break; // nothing left to charge with; _priceFill would no-op
+            uint256 idx = (cursor + MAX_RECENT_FILLS - 1 - k) % MAX_RECENT_FILLS;
+            RecentFill storage e = rf.entries[idx];
+            if (e.filledAt == 0) break; // ring not yet wrapped: nothing older was ever written
+            if (e.filledAt < cutoff) break;
+
+            uint256 id = uint256(e.id);
             Order storage o = orders[id];
             if (!o.filled) continue; // claimed since
             uint256 base = AirbagMath.displacementBps(o.zeroForOne, o.tickLower, ctx.spacing, preTick);
@@ -623,22 +675,31 @@ abstract contract AirbagOrders is ERC721, IUnlockCallback {
     }
 
     function _rememberFill(PoolId poolId, uint256 id) private {
-        BlockFills storage bf = _blockFills[poolId];
-        if (bf.blockNumber != uint64(block.number)) {
-            bf.blockNumber = uint64(block.number);
-            bf.count = 0;
+        RecentFills storage rf = _recentFills[poolId];
+        uint256 slot = rf.cursor % MAX_RECENT_FILLS;
+        RecentFill storage victim = rf.entries[slot];
+
+        // KNOWN LIMIT, deliberately observable rather than silent. The ring holds a bounded number
+        // of fills, so a filler who saturates it can push a maker out of reach and then split. The
+        // event fires only when the entry being overwritten was still inside the window — that is
+        // genuine capacity pressure, not the ordinary recycling of a stale slot.
+        //
+        // Raising the constant does not fix it: the number of fills in a window is unbounded. The
+        // real fix is to remember the TICKS touched rather than the orders, since orders at a tick
+        // share a base, and that is a restructure rather than a patch. Still open, still written
+        // down, and now monitorable with a signal that means something.
+        if (
+            victim.filledAt != 0
+                && block.timestamp <= uint256(victim.filledAt) + TOPUP_WINDOW_SECONDS
+                && orders[uint256(victim.id)].filled
+        ) {
+            emit RecentFillEvicted(poolId, uint256(victim.id));
         }
-        if (bf.count < MAX_BLOCK_FILLS) {
-            bf.ids[bf.count] = id;
-            bf.count++;
-        } else {
-            // KNOWN LIMIT, deliberately observable rather than silent. Beyond this many fills in
-            // one block an order is not revisitable, so a filler who first saturates the list can
-            // then split their swap and escape the top-up. Raising the constant does not fix it —
-            // the number of swaps in a block is unbounded. The real fix is to remember the TICKS
-            // touched rather than the orders, since orders at a tick share a base, and that is a
-            // restructure rather than a patch. Until then this is monitorable from day one.
-            emit BlockFillOverflow(poolId, id);
+
+        victim.filledAt = uint64(block.timestamp);
+        victim.id = uint192(id);
+        unchecked {
+            rf.cursor = uint16((slot + 1) % MAX_RECENT_FILLS);
         }
     }
 

@@ -1011,3 +1011,81 @@ contract deployment as the seed's `modify`. Every hash in this document is now r
 `cast tx` against the chain.
 
 ---
+
+## Day 24 — 17 Sep
+
+**The UHI10 result came back: 4.25 out of 5, no prize. And one real bug.**
+
+Scores: Original Idea 4, Unique Execution 4.5, Impact 4, Functionality 4.5, Presentation 4.5. The
+judge had clearly read the source rather than only watched the video — they named `_bankProceeds`
+removing the position inside the same `afterSwap`, the charge budget being spent inside `_markFills`
+rather than clamped afterwards, `invariant_claimsAreFullyBacked` holding the hook to that, and
+`test_replayHistory` sizing the tail against 48 hours of real swaps. Every one of those came out of
+the two audit rounds, which is a reasonable answer to whether that work was worth the time.
+
+Then the part worth more than the score.
+
+### The finding
+
+> `_topUpBlockFills` only revisits makers filled in the current block, so a filler who crosses an
+> order by a hair in one block and pushes the price the rest of the way in the next block pays for
+> the sliver and nothing more.
+
+Checked it before agreeing, and it is exactly right. `_topUpBlockFills` opened with
+`if (bf.blockNumber != uint64(block.number)) return 0;` and `_rememberFill` zeroed the count on a
+new block. Wait one block, finish the move, pay nothing.
+
+Wrote the detector first. It reproduced the escape and priced it: **174,772,660,917 wei** for the
+split versus **1,672,824,040,214** for the same distance in one swap. The maker was short **89.6%**.
+Not a gap — very nearly a total escape.
+
+### Why neither audit found it
+
+**No test in the suite had ever advanced the block number.** `vm.roll` and `vm.warp` appeared
+nowhere across fifteen files. The branch that asks whether a recorded fill belongs to the current
+block had no test that could take it the other way. It was not uncovered — it was *unreachable*,
+and an unreachable branch does not lower a coverage number, it hides behind one.
+
+That is the same shape as the exact-output critical in round two, where no test had ever passed a
+positive `amountSpecified`. Twice now the defect has been in the one case the harness could not
+express. The lesson is not "write more tests", it is **ask what your harness cannot say**.
+
+### The fix
+
+`BlockFills` becomes `RecentFills`: a 32-entry ring written circularly, each entry packing
+`filledAt` and `id` into one slot, walked newest-first and stopping at the first entry outside the
+window. Entries go in in non-decreasing time order, so that early stop is sound and the walk costs
+what the window holds rather than what the ring could.
+
+The window is measured in **seconds**, not blocks — the same bytecode runs on Base at 2s and
+Unichain at 1s, and a block count would quietly mean different things on each.
+
+Thirty seconds is a judgement, and the honest version of what it buys: **a long enough wait always
+escapes**. No finite window prevents that. What it removes is the *free* split — holding a
+half-finished move for thirty seconds carries price risk and invites someone else to take the
+opportunity first. Same bargain a TWAP offers.
+
+Widening the window is safe for a reason already in the code: each swap's base is
+`max(already paid, displacement at its own preTick)`, so a swap arriving twenty seconds later pays
+for the distance *it* moved and nothing more. It cannot inherit a stranger's move.
+
+### Then the detector again, one level up
+
+The invariant handler had six actions and not one of them moved the clock, so the strongest
+detector in the project — the one that caught the insolvency — could not reach the window either.
+Added `passTime`, spreading 1–45 seconds against a 30-second window so the fuzzer lands on both
+sides of the boundary. It now interleaves ~800 time jumps with swaps and fills; all three
+invariants still hold.
+
+70 tests, 0 failures.
+
+### What is not fixed
+
+The deployed hooks are immutable and predate this. **The live addresses still carry the bug.**
+Putting the fix on chain means a fresh deployment, and that is a decision rather than a task.
+
+The ring's capacity limit also stands: 32 entries, and saturating it still buys an escape. The real
+answer there remains keying on ticks rather than orders, which is a restructure. Written down,
+still open, now with an event that fires only on genuine pressure.
+
+---

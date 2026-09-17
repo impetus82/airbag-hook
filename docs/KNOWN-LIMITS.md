@@ -1,10 +1,17 @@
 # Known limits
 
 Written because a hook that quietly falls short is worse than one that says where it stops.
-Everything here is deliberately not fixed, with the reason stated, and none of it risks a maker's
-principal. Most of it came out of adversarial review before deployment; the last two sections are
+Everything still open here is deliberately so, with the reason stated, and none of it risks a
+maker's principal. Most came out of adversarial review before deployment; two sections are
 properties of the design rather than findings against it, and are here because a reader deserves
 to meet them in the documentation rather than in production.
+
+> ⚠️ **The deployed hooks predate the top-up fix.** The instances listed in
+> [DEPLOYMENTS.md](DEPLOYMENTS.md) are immutable and were compiled before the block-boundary
+> defect below was found, so **they still carry it**. The fix is in `main`; putting it on chain
+> means a fresh deployment at a fresh address. Said plainly here because a repository that
+> documents a fix while the live contract still has the bug is worse than one that documents
+> neither.
 
 ## Size guards are measured against instantaneous liquidity
 
@@ -24,20 +31,39 @@ since the per-swap fill budget bounds the cost of crossing one and `settleFills`
 remainder. What is left is a large order that dampens its own displacement — which mostly
 disadvantages its owner.
 
-## The block's fill list holds 32 orders
+## The recent-fill ring holds 32 entries
 
 Top-ups — the mechanism that stops a filler from splitting one swap into two and paying for
-neither — reach only orders recorded in the current block's fill list. Past 32 fills in a block,
-further orders are not recorded, and a filler who first saturates the list can then split their
-swap and escape.
+neither — reach only fills still recorded in the pool's ring. Past 32 fills inside the window,
+the oldest entry is overwritten, and a filler who saturates the ring can then split their swap
+and escape.
 
-Raising the constant does not fix it: the number of swaps in a block is unbounded. The real fix
+Raising the constant does not fix it: the number of fills in a window is unbounded. The real fix
 is to remember the *ticks* touched rather than the orders, because orders resting at one tick
 share a displacement base, and a bounded set of ticks then covers an unbounded set of orders.
-That is a restructure rather than a patch.
+That is a restructure rather than a patch, and it is the piece still outstanding here.
 
-Until then the overflow emits `BlockFillOverflow`, so the gap is observable from the first block
-rather than invisible.
+Overwriting a live entry emits `RecentFillEvicted`, so the gap is observable from the first
+occurrence rather than invisible — and the event fires only when the displaced entry was still
+inside the window and unclaimed, which is genuine capacity pressure rather than routine recycling.
+
+### What used to be here, and is now fixed
+
+The window was one **block** wide, and that was worse than the capacity limit: no saturation was
+needed at all. Cross a maker by a hair, wait a single block, finish the move — the top-up returned
+on its first line and the maker ate the overshoot. Measured, the maker was short **89.6%** of what
+the same move in one swap would have paid.
+
+Reported by the UHI10 judge. Neither adversarial audit round found it, and the reason is worth
+more than the bug: **no test in the suite had ever advanced the block number**, so the branch was
+not merely uncovered, it was unreachable. The window is now measured in seconds
+(`TOPUP_WINDOW_SECONDS`), the invariant handler can move the clock, and
+`test/AirbagTopUp.t.sol` pins both edges — that a split across a boundary still pays, and that
+the window does expire.
+
+A long enough wait still escapes; no finite window can prevent that. What it removes is the
+*free* split: holding a half-finished move for thirty seconds carries price risk and invites
+anyone else to take the opportunity first.
 
 ## Bucket ordering is approximately, not exactly, first-in-first-out
 

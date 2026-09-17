@@ -134,6 +134,19 @@ contract AirbagHandler is Test {
         ) {} catch {}
     }
 
+    /// @dev Let the fuzzer move the clock. Without this the whole invariant run happened inside
+    ///      one block, so every branch keyed on elapsed time was unreachable — which is precisely
+    ///      how the top-up window shipped one block wide and survived two audit rounds. An
+    ///      invariant suite that cannot advance time cannot falsify a claim about time.
+    ///
+    ///      The spread straddles TOPUP_WINDOW_SECONDS deliberately: sometimes the next swap lands
+    ///      inside the window and must top up, sometimes outside and must not.
+    function passTime(uint8 seconds_) public {
+        uint256 step = uint256(seconds_) % 45 + 1; // 1..45s, against a 30s window
+        vm.warp(block.timestamp + step);
+        vm.roll(block.number + step / 2 + 1); // ~2s blocks, and never a zero-block jump
+    }
+
     function _drop(uint256 i) private {
         live[i] = live[live.length - 1];
         live.pop();
