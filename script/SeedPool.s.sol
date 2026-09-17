@@ -130,3 +130,51 @@ contract SeedPool is Script {
         console2.log("pool liquidity now", d.poolManager.getLiquidity(key.toId()));
     }
 }
+
+/// @notice Take a seed back out of a pool.
+///
+/// @dev Written for the superseded deployment. Those hooks are immutable and carry both top-up
+///      defects, and an immutable permissionless contract cannot be recalled — but `createOrder`
+///      reverts with `PoolHasNoLiquidity` when the pool's active liquidity is zero, so withdrawing
+///      the seed closes the easy path into a version known to be broken. It is a fence, not a
+///      recall: anyone can still add their own liquidity, or open a fresh pool against the old
+///      hook. Said plainly because the difference matters.
+///
+///      The position belongs to the router that opened it, and `SeedRouter.modify` is owner-only,
+///      so this has to broadcast from the same deployer.
+///
+///      HOOK=0x… ROUTER=0x… TICK_LOWER=… TICK_UPPER=… LIQUIDITY=… \
+///        forge script script/SeedPool.s.sol --tc UnseedPool --rpc-url base --broadcast
+contract UnseedPool is Script {
+    using StateLibrary for IPoolManager;
+
+    function run() external {
+        AirbagConfig.Deployment memory d = AirbagConfig.forChain(block.chainid);
+        address hook = vm.envAddress("HOOK");
+        SeedRouter router = SeedRouter(vm.envAddress("ROUTER"));
+        int24 lower = int24(vm.envInt("TICK_LOWER"));
+        int24 upper = int24(vm.envInt("TICK_UPPER"));
+        uint128 liquidity = uint128(vm.envUint("LIQUIDITY"));
+
+        PoolKey memory key = AirbagConfig.poolKey(d, hook);
+
+        require(lower < upper, "TICK_LOWER must be below TICK_UPPER");
+        require(lower % d.tickSpacing == 0 && upper % d.tickSpacing == 0, "range must align to the spacing");
+        require(liquidity > 0, "nothing to withdraw");
+
+        console2.log("chain        ", d.name);
+        console2.log("router       ", address(router));
+        console2.log("tick lower   ", int256(lower));
+        console2.log("tick upper   ", int256(upper));
+        console2.log("liquidity out", liquidity);
+        console2.log("pool liquidity before", d.poolManager.getLiquidity(key.toId()));
+
+        vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
+        BalanceDelta delta = router.modify(key, lower, upper, -int256(uint256(liquidity)));
+        vm.stopBroadcast();
+
+        console2.log("returned currency0", int256(delta.amount0()));
+        console2.log("returned currency1", int256(delta.amount1()));
+        console2.log("pool liquidity after ", d.poolManager.getLiquidity(key.toId()));
+    }
+}
