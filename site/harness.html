@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask what your harness cannot say</title>
+<meta name="description" content="Three real bugs that lived in the one case the test suite could not express — and the four questions that find them.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --ground: #F6F7F9;
+    --surface: #FFFFFF;
+    --ink: #131A26;
+    --muted: #5A6577;
+    --line: #DDE1E8;
+    --accent: #C2621A;
+    --accent-soft: #F6E7D8;
+    --data: #1F6F62;
+    --shadow: 0 1px 2px rgba(19, 26, 38, .05);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0E1420;
+      --surface: #151D2B;
+      --ink: #E7EAF0;
+      --muted: #98A3B5;
+      --line: #26303F;
+      --accent: #E8933F;
+      --accent-soft: #2A2016;
+      --data: #57B8A4;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0E1420;
+    --surface: #151D2B;
+    --ink: #E7EAF0;
+    --muted: #98A3B5;
+    --line: #26303F;
+    --accent: #E8933F;
+    --accent-soft: #2A2016;
+    --data: #57B8A4;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Source Serif 4", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px 96px; }
+  @media (min-width: 640px) { .wrap { padding: 0 28px 96px; } }
+  .col { max-width: 66ch; }
+
+  h1, h2, h3, .label { font-family: Archivo, "Helvetica Neue", Arial, sans-serif; }
+  h1 {
+    font-size: clamp(2.1rem, 6vw, 3.6rem);
+    line-height: 1.04; letter-spacing: -.025em; font-weight: 700;
+    margin: 0 0 .5rem; text-wrap: balance;
+  }
+  h2 {
+    font-size: 1.32rem; font-weight: 600; letter-spacing: -.01em;
+    margin: 0 0 .9rem; text-wrap: balance;
+  }
+  h3 { font-size: 1rem; font-weight: 600; margin: 0 0 .4rem; }
+  p { margin: 0 0 1.05rem; }
+  .lede { font-size: 1.16rem; color: var(--muted); margin-bottom: 0; }
+  .label {
+    font-size: .69rem; font-weight: 600; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  strong { font-weight: 600; }
+  code, .num { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  code { font-size: .87em; background: var(--accent-soft); padding: .1em .35em; border-radius: 3px; }
+  pre {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+    padding: 14px 16px; overflow-x: auto; margin: 18px 0; box-shadow: var(--shadow);
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: .82rem; line-height: 1.55;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  a { color: var(--ink); text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  header { padding: 72px 0 40px; }
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 26px;
+    font-family: "JetBrains Mono", monospace; font-size: .78rem; color: var(--muted);
+  }
+
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+
+  .figures { display: grid; gap: 16px; margin: 30px 0 4px; grid-template-columns: repeat(2, 1fr); }
+  @media (min-width: 720px) { .figures { grid-template-columns: repeat(4, 1fr); } }
+  .fig {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 6px; padding: 16px; box-shadow: var(--shadow);
+  }
+  .fig .n {
+    font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums;
+    font-size: 1.55rem; font-weight: 500; letter-spacing: -.02em; display: block;
+  }
+  .fig .k { font-size: .8rem; color: var(--muted); }
+  .fig.hero .n { color: var(--accent); }
+
+  table { border-collapse: collapse; width: 100%; margin: 20px 0; font-size: .94rem; }
+  th, td { text-align: left; padding: 9px 14px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-family: Archivo, sans-serif; font-size: .74rem; text-transform: uppercase;
+       letter-spacing: .1em; color: var(--muted); font-weight: 600; }
+  td.n { font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; text-align: right; }
+  .scroller { overflow-x: auto; }
+
+  .note {
+    border-left: 2px solid var(--accent); padding: 2px 0 2px 18px;
+    margin: 22px 0; color: var(--muted); font-size: .96rem;
+  }
+  .checks { display: grid; gap: 16px; margin-top: 22px; }
+  .check { border-top: 1px solid var(--line); padding-top: 16px; }
+  .check p { margin: 0; color: var(--muted); font-size: .95rem; }
+  .check h3 { color: var(--ink); }
+  footer { border-top: 1px solid var(--line); padding-top: 28px; color: var(--muted); font-size: .9rem; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="label">Testing</div>
+    <h1>Ask what your harness cannot say</h1>
+    <p class="lede">Three times in one project, a real bug was sitting in the one case the test
+      suite could not express. Not undertested — <em>unreachable</em>. And an unreachable branch
+      does not lower a coverage number. It hides behind one.</p>
+    <div class="meta">
+      <span>Uniswap v4 hook</span>
+      <span>Foundry</span>
+      <span><a href="https://github.com/impetus82/airbag-hook">source</a></span>
+      <span><a href="https://impetus82.github.io/airbag-hook/explainer/">what the hook does</a></span>
+    </div>
+  </header>
+
+  <section>
+    <div class="col">
+      <p>Their provenance is worth stating exactly, because the pattern is in it. The first was
+        introduced by my own fix for an earlier finding, and caught one audit round later. The
+        second survived <strong>both</strong> adversarial audit rounds and was found by a hackathon
+        judge reading the source. The third was introduced by my fix for the second, and caught by
+        the detector I had just written to test that fix.</p>
+      <p>All three are in a public repository together with the tests that now reach them, so every
+        number below can be checked.</p>
+    </div>
+
+    <div class="figures">
+      <div class="fig hero"><span class="n">89.6%</span><span class="k">of a maker's compensation lost to the escape two audits missed</span></div>
+      <div class="fig"><span class="n">0</span><span class="k">collected on exact-output swaps, in both directions</span></div>
+      <div class="fig"><span class="n">15</span><span class="k">test files, none of which had ever advanced the clock</span></div>
+      <div class="fig"><span class="n">3</span><span class="k">attempts before one detector was honest</span></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="col">
+      <div class="label">Case one</div>
+      <h2>Half the charge surface had never been executed</h2>
+      <p>The hook takes a payment out of a swap, so it has to know what that swap actually
+        received. The clamp bounded the charge by <code>received &gt; 0</code>.</p>
+      <p>That reads as obviously correct, and it is — for exact-input swaps. In Uniswap v4 the
+        <em>unspecified</em> currency is the swap's output when the input is exact, and its
+        <strong>input</strong> when the output is exact, where the delta is always negative. So the
+        bound evaluated to zero on 100% of exact-output swaps, in both directions.</p>
+    </div>
+
+    <div class="col scroller">
+      <table>
+        <tr><th>Same 40 bp crossing</th><th style="text-align:right">Collected</th></tr>
+        <tr><td>exact input</td><td class="n">924,260,342,130</td></tr>
+        <tr><td>exact output</td><td class="n">0</td></tr>
+      </table>
+    </div>
+
+    <div class="col">
+      <p>Nothing in the suite had ever passed a positive <code>amountSpecified</code>. Half the
+        charge surface had never once been executed — and the invariant that should have caught it
+        had a handler with the sign hard-coded, so the fuzzer could not produce an exact-output
+        swap either.</p>
+      <div class="note">The detector had the same blind spot as the tests it was supposed to
+        backstop. That is the part worth remembering: a fuzzer inherits every constraint its
+        handler imposes, and a constant in a handler is a case it can never reach, however many
+        runs you give it.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="col">
+      <div class="label">Case two</div>
+      <h2>Wait one block, pay nothing</h2>
+      <p>The hook revisits recently-filled makers to top up what they are owed as a move continues.
+        The top-up opened with a single line:</p>
+<pre><code>if (bf.blockNumber != uint64(block.number)) return 0;</code></pre>
+      <p>Cross a maker by a hair in one block. Wait a single block. Push the price the rest of the
+        way. You pay for the sliver and nothing else.</p>
+      <p>Priced by the detector before anything was changed: <span class="num">174,772,660,917</span>
+        wei for the split, against <span class="num">1,672,824,040,214</span> for the same distance
+        in one swap. The maker was short <strong>89.6%</strong> — not a gap, very nearly a total
+        escape.</p>
+      <h3>Why two audit rounds missed it</h3>
+      <p><strong>No test in the suite had ever advanced the block number.</strong>
+        <code>vm.roll</code> and <code>vm.warp</code> appeared nowhere across fifteen files. The
+        branch asking whether a recorded fill belongs to the current block had no test that could
+        take it the other way.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="col">
+      <div class="label">Case three</div>
+      <h2>My own fix, the same shape again</h2>
+      <p>The fix replaced a block-keyed list with a 32-entry ring keyed on ticks, walked under a
+        bounded work budget of 32 orders — and spent that budget newest-first.</p>
+      <p>Which starves the oldest. The eviction had not been fixed; it had been moved out of the
+        ring and into the gas budget. Confirmed by raising the budget to 512, watching the test
+        pass, and putting it straight back.</p>
+      <p>Oldest-first is the principled order, and the argument is one sentence: a maker filled
+        twenty-nine seconds ago is about to leave the window and has no further chances, while one
+        filled a second ago has the rest of it. Spend the last chance on whoever is running out of
+        them.</p>
+      <div class="note">Writing that detector took three tries, and the failures were the useful
+        part. The first version <strong>passed</strong> — because the crowd never filled. One swap
+        settles at most 24 orders, and the test tried to queue 36. A detector that passes for the
+        wrong reason is worse than no detector, and the only thing that catches it is an assertion
+        about the <em>setup</em> rather than the outcome.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="col">
+      <div class="label">The pattern</div>
+      <h2>Coverage cannot report a branch no test can enter</h2>
+      <p>Coverage measures which lines your tests reached. It says nothing about the lines they
+        <em>could not</em> reach, because a branch no test can enter never appears as a miss — it
+        appears as though it isn't there.</p>
+      <p>So the useful question is not <em>what is untested?</em> It is:</p>
+      <h2 style="color:var(--accent)">What can my harness not say?</h2>
+      <p>Both criticals above lived in a case the harness had no vocabulary for. A sign that was
+        never positive. A clock that never moved. Neither is exotic. Both were one line of setup
+        away from being reachable, and that one line was missing everywhere at once — which is
+        exactly why no individual test looked suspicious.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="col">
+      <div class="label">Practice</div>
+      <h2>What to check in your own suite</h2>
+      <p>Four questions, in rough order of how often they pay.</p>
+
+      <div class="checks">
+        <div class="check">
+          <h3>Which primitives does the suite never use?</h3>
+          <p>Grep for the ones that move the environment: <code>vm.roll</code>, <code>vm.warp</code>,
+            <code>vm.prank</code> on an unexpected caller, a re-entrant call, a second pool. A count
+            of zero across the whole repository is the signal. Not a low count — zero.</p>
+        </div>
+        <div class="check">
+          <h3>Which parameters are hard-coded in your fuzz handlers?</h3>
+          <p>Any constant in a handler is a case the fuzzer cannot produce, however many runs you
+            give it. Signs and directions are the expensive ones, because they usually select
+            between two code paths rather than two values.</p>
+        </div>
+        <div class="check">
+          <h3>Does your invariant fail on the broken version?</h3>
+          <p>An invariant that has never been shown to fail is an assertion about your confidence,
+            not about the code. Write the detector first; run it against the old build; only then
+            fix anything.</p>
+        </div>
+        <div class="check">
+          <h3>Does your test assert on its own setup?</h3>
+          <p>The most dangerous test is the one that passes because it never built the state it
+            claims to test. If the scenario needs 36 orders queued, assert that 36 are queued before
+            asserting anything about the outcome.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="col">
+      <p>Every case above is in
+        <a href="https://github.com/impetus82/airbag-hook">github.com/impetus82/airbag-hook</a> —
+        the code, the tests that now reach these branches, and a build log recording each one as it
+        was found rather than reconstructed afterwards. <code>docs/BUILD-LOG.md</code> has the long
+        version; <code>docs/KNOWN-LIMITS.md</code> has what is still deliberately open, and why.</p>
+    </div>
+  </footer>
+</div>
+</html>

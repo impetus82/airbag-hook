@@ -80,6 +80,16 @@ A one-page walkthrough of the mechanism, the measured evidence, and the known li
 
 **https://impetus82.github.io/airbag-hook/explainer/** — source in `site/index.html`.
 
+## On testing
+
+Three bugs in this project lived in the one case the test suite could not express — not
+undertested, *unreachable*. One survived both adversarial audit rounds and was found by a judge
+reading the source. What they cost, why a coverage number could not report them, and the four
+questions that find this class:
+
+**https://impetus82.github.io/airbag-hook/harness/** — source in `site/harness.html`, plain text in
+[docs/HARNESS.md](docs/HARNESS.md).
+
 ## Known limits
 
 See [docs/KNOWN-LIMITS.md](docs/KNOWN-LIMITS.md). Found by adversarial review before deployment,
