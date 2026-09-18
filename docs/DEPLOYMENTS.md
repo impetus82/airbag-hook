@@ -40,9 +40,10 @@ Deployed 25 August, verified. They are **immutable and carry both top-up defects
 window and the order-keyed ring — so nothing new should be pointed at them. They stay live as the
 record of what was submitted, and the proof-of-life cycles below ran against them.
 
-**Their seed was withdrawn on 17 September, and both pools now hold zero active liquidity.**
-`createOrder` reverts with `PoolHasNoLiquidity` when that is the case, so the easy path into a
-version known to be broken is closed.
+**Both their seeds have been withdrawn — the re-seed on 17 September, the original 25-August band on
+18 September — and the pools now hold nothing at all, in range or out of it.** `createOrder` reverts
+with `PoolHasNoLiquidity` when active liquidity is zero, so the easy path into a version known to be
+broken is closed.
 
 Closed, not recalled — and the difference is the point. These hooks are immutable and
 permissionless: anyone can add their own liquidity to these pools, or open a fresh pool against
@@ -52,9 +53,9 @@ it is broken. All three are done.
 
 ## Seeded pools — the superseded deployment
 
-Both pools carry **50,000,000,000 units of liquidity** across ±120 tick spacings around the
+Both pools carried **50,000,000,000 units of liquidity** across ±120 tick spacings around the
 initial price, confirmed on chain rather than from the broadcast log. Cost per chain: 0.0000674
-WETH + 0.126 USDC.
+WETH + 0.126 USDC. Withdrawn 18 September; the arithmetic of what came back is below.
 
 | | Base | Unichain |
 |---|---|---|
@@ -64,6 +65,22 @@ WETH + 0.126 USDC.
 The routers can **remove** liquidity as well as add it, so the seed is recoverable by its owner.
 That is not a given: the equivalent router from the previous hookathon could only add, and its
 seed is still stranded on Unichain. A one-line omission that costs whatever went in.
+
+**Collected 18 September.** By then the band was long out of range — the market sat at ∓198240,
+above the Base range and below its Unichain mirror — so each position had converted entirely into
+USDC and held no WETH at all.
+
+| | Base | Unichain |
+|---|---|---|
+| withdrawal tx | [`0x7a5d21d5…b60d32`](https://basescan.org/tx/0x7a5d21d58abd78d1caa9d7817f9ae9cdf23c4112bea409744ba829c04cb60d32) | [`0x892cf4b1…6a0a31`](https://uniscan.xyz/tx/0x892cf4b1935f218bbeebe593b66620519bef947e07ed950958e86bb8786a0a31) |
+| returned | 0.259494 USDC | 0.259482 USDC |
+
+That number deserves a sentence, because it is the thing this hook exists to argue about. Each band
+went in holding 0.0000674 WETH + 0.126 USDC — about 0.291 USDC-equivalent at today's price — and
+came back as 0.259 USDC. The missing 0.032, near enough 11%, is divergence loss: the band spanned
+roughly 1,648–2,093 USDC per WETH, the price left it upward, and the position sold its entire WETH
+side out across that range while the market went on to 2,457. A passive LP's version of precisely
+what a resting limit order suffers, paid here by the project's own seed.
 
 Order size is bounded relative to pool depth — at least 1 bp of it, at most 1% — so with this seed
 a demo order runs from 5,000,000 to 500,000,000 liquidity units.
